@@ -221,6 +221,13 @@ export type GraphIssueCode =
   | 'isolated-node'
   | 'node-outside-canvas'
   | 'attribute-out-of-range'
+  /**
+   * A *weighted* cost that is not > 0. Separate from `non-positive-length` on purpose: an edge can
+   * have perfectly legal metres and still cost zero under a profile, and a zero cost breaks
+   * Dijkstra's "settled means settled" invariant. Only a supplied {@link EdgeCost} can see it, so
+   * the check is opt-in rather than always on.
+   */
+  | 'non-positive-cost'
 
 export interface GraphIssue {
   readonly code: GraphIssueCode
