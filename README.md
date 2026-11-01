@@ -59,7 +59,7 @@ src/data/       campus.json + its schema + the adapter that turns it into a grap
 src/ui/         SVG map, panels, controls
 src/hooks/      the only place the two halves meet
 src/test/       architecture guards (the rules above)
-docs/           architecture, algorithms, map-data format, phase log
+docs/           architecture, algorithms, data schema, map-data workflow, phase log
 ```
 
 ## Documentation
@@ -68,7 +68,8 @@ docs/           architecture, algorithms, map-data format, phase log
 | --- | --- |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layers, data flow, import rules, why the split is enforced in code |
 | [docs/ALGORITHMS.md](docs/ALGORITHMS.md) | per-structure notes: idea, invariants, complexity, measured results |
-| [docs/MAP-DATA.md](docs/MAP-DATA.md) | `campus.json` schema, coordinate system, how to digitise a real campus |
+| [docs/SCHEMA.md](docs/SCHEMA.md) | `campus.json` field by field: units, defaults, derived values, the validation matrix |
+| [docs/MAP-DATA.md](docs/MAP-DATA.md) | how `campus.json` gets made and replaced: digitising, calibration, editor export |
 | [docs/PHASES.md](docs/PHASES.md) | phase plan, amendment ledger, per-phase log with verification output |
 
 ## Status

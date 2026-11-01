@@ -7,22 +7,1434 @@
     "location": {
       "city": "Bengaluru",
       "state": "Karnataka",
-      "country": "IN"
+      "country": "IN",
+      "latitude": 12.8809,
+      "longitude": 77.5913
     },
     "scaleSource": "none",
     "dataStatus": "synthetic-placeholder",
     "authoredBy": "MARG project team",
     "updatedAt": "2026-11-01",
-    "notes": "Placeholder dataset shipped with Phase 0: the schema and the app shell exist, the geometry does not yet. Phase 2 fills this file with a synthetic Amrita Bengaluru campus; Phase 7's map editor exports a digitised version over the top of it. Routing behaviour is unchanged by that swap because nothing outside this file knows where a building is."
+    "notes": "Synthetic but topologically plausible Amrita Bengaluru layout, authored for Phase 2 so routing, search and the map can be built and tested against a real-shaped graph before anything is digitised. Names are generic on purpose: the real campus is a data edit, not a code change. Replace this file with the export of Phase 7's map editor and nothing else moves. One user unit is one metre (canvas.pixelsPerMetre = 1), and two edge lengths are written out by hand while every other one is derived from coordinates, so both code paths stay exercised."
   },
   "canvas": {
     "width": 1600,
     "height": 1000,
     "pixelsPerMetre": 1
   },
-  "zones": [],
-  "nodes": [],
-  "edges": [],
-  "buildings": [],
-  "surfaces": []
+  "zones": [
+    {
+      "id": "arrival",
+      "label": "Arrival & Parking",
+      "color": "#6366f1"
+    },
+    {
+      "id": "academic",
+      "label": "Academic Blocks",
+      "color": "#0ea5e9"
+    },
+    {
+      "id": "learning",
+      "label": "Library & Learning Square",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "living",
+      "label": "Hostels & Dining",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "sports",
+      "label": "Sports Ground",
+      "color": "#10b981"
+    },
+    {
+      "id": "services",
+      "label": "Amenities & Services",
+      "color": "#14b8a6"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "gate-north",
+      "label": "North Gate",
+      "kind": "gate",
+      "x": 800,
+      "y": 60,
+      "zone": "arrival",
+      "category": "entry",
+      "aliases": [
+        "main gate",
+        "entrance",
+        "gate 1"
+      ]
+    },
+    {
+      "id": "gate-south",
+      "label": "South Gate",
+      "kind": "gate",
+      "x": 800,
+      "y": 950,
+      "zone": "arrival",
+      "category": "entry",
+      "aliases": [
+        "back gate",
+        "gate 2"
+      ]
+    },
+    {
+      "id": "parking",
+      "label": "Visitor Parking",
+      "kind": "place",
+      "x": 500,
+      "y": 130,
+      "zone": "arrival",
+      "category": "parking",
+      "aliases": [
+        "car park",
+        "parking lot"
+      ]
+    },
+    {
+      "id": "j-gate-n",
+      "label": "gate n",
+      "kind": "junction",
+      "x": 800,
+      "y": 170,
+      "zone": "arrival"
+    },
+    {
+      "id": "j-park",
+      "label": "park",
+      "kind": "junction",
+      "x": 620,
+      "y": 170,
+      "zone": "arrival"
+    },
+    {
+      "id": "j-east-n",
+      "label": "east n",
+      "kind": "junction",
+      "x": 1000,
+      "y": 250,
+      "zone": "arrival"
+    },
+    {
+      "id": "block-a",
+      "label": "Academic Block A",
+      "kind": "place",
+      "x": 1180,
+      "y": 330,
+      "zone": "academic",
+      "category": "academic",
+      "aliases": [
+        "a-block",
+        "block a"
+      ]
+    },
+    {
+      "id": "block-b",
+      "label": "Academic Block B",
+      "kind": "place",
+      "x": 1180,
+      "y": 500,
+      "zone": "academic",
+      "category": "academic",
+      "aliases": [
+        "b-block",
+        "block b"
+      ]
+    },
+    {
+      "id": "block-c",
+      "label": "Academic Block C",
+      "kind": "place",
+      "x": 1180,
+      "y": 670,
+      "zone": "academic",
+      "category": "academic",
+      "aliases": [
+        "c-block",
+        "block c"
+      ]
+    },
+    {
+      "id": "labs",
+      "label": "Research Labs",
+      "kind": "place",
+      "x": 1400,
+      "y": 330,
+      "zone": "academic",
+      "category": "academic",
+      "aliases": [
+        "research park"
+      ],
+      "minor": true
+    },
+    {
+      "id": "j-acad-n",
+      "label": "acad n",
+      "kind": "junction",
+      "x": 1000,
+      "y": 330,
+      "zone": "academic"
+    },
+    {
+      "id": "j-acad-c",
+      "label": "acad c",
+      "kind": "junction",
+      "x": 1000,
+      "y": 500,
+      "zone": "academic"
+    },
+    {
+      "id": "j-acad-s",
+      "label": "acad s",
+      "kind": "junction",
+      "x": 1000,
+      "y": 670,
+      "zone": "academic"
+    },
+    {
+      "id": "j-labs",
+      "label": "labs",
+      "kind": "junction",
+      "x": 1230,
+      "y": 240,
+      "zone": "academic"
+    },
+    {
+      "id": "library",
+      "label": "Central Library",
+      "kind": "place",
+      "x": 800,
+      "y": 400,
+      "zone": "learning",
+      "category": "library",
+      "aliases": [
+        "lib",
+        "cl",
+        "central lib"
+      ]
+    },
+    {
+      "id": "reading-garden",
+      "label": "Reading Garden",
+      "kind": "place",
+      "x": 600,
+      "y": 400,
+      "zone": "learning",
+      "category": "outdoor",
+      "minor": true
+    },
+    {
+      "id": "admin",
+      "label": "Administration Block",
+      "kind": "place",
+      "x": 600,
+      "y": 560,
+      "zone": "learning",
+      "category": "office",
+      "aliases": [
+        "admin",
+        "front office"
+      ]
+    },
+    {
+      "id": "library-door",
+      "label": "Library Entrance",
+      "kind": "entrance",
+      "x": 899,
+      "y": 474,
+      "zone": "learning",
+      "tags": [
+        "door"
+      ]
+    },
+    {
+      "id": "j-quad-n",
+      "label": "quad n",
+      "kind": "junction",
+      "x": 800,
+      "y": 290,
+      "zone": "learning"
+    },
+    {
+      "id": "j-quad-w",
+      "label": "quad w",
+      "kind": "junction",
+      "x": 620,
+      "y": 290,
+      "zone": "learning"
+    },
+    {
+      "id": "j-quad-c",
+      "label": "quad c",
+      "kind": "junction",
+      "x": 800,
+      "y": 490,
+      "zone": "learning"
+    },
+    {
+      "id": "j-quad-s",
+      "label": "quad s",
+      "kind": "junction",
+      "x": 800,
+      "y": 640,
+      "zone": "learning"
+    },
+    {
+      "id": "j-quad-sw",
+      "label": "quad sw",
+      "kind": "junction",
+      "x": 620,
+      "y": 640,
+      "zone": "learning"
+    },
+    {
+      "id": "hostel-1",
+      "label": "Hostel Block 1",
+      "kind": "place",
+      "x": 260,
+      "y": 700,
+      "zone": "living",
+      "category": "residence",
+      "aliases": [
+        "residency 1"
+      ]
+    },
+    {
+      "id": "hostel-2",
+      "label": "Hostel Block 2",
+      "kind": "place",
+      "x": 260,
+      "y": 880,
+      "zone": "living",
+      "category": "residence",
+      "aliases": [
+        "residency 2"
+      ]
+    },
+    {
+      "id": "cafeteria",
+      "label": "Cafeteria",
+      "kind": "place",
+      "x": 520,
+      "y": 780,
+      "zone": "living",
+      "category": "food",
+      "aliases": [
+        "mess",
+        "canteen",
+        "food court"
+      ]
+    },
+    {
+      "id": "j-hostel-n",
+      "label": "hostel n",
+      "kind": "junction",
+      "x": 400,
+      "y": 700,
+      "zone": "living"
+    },
+    {
+      "id": "j-mess",
+      "label": "mess",
+      "kind": "junction",
+      "x": 400,
+      "y": 850,
+      "zone": "living"
+    },
+    {
+      "id": "j-living-e",
+      "label": "living e",
+      "kind": "junction",
+      "x": 660,
+      "y": 780,
+      "zone": "living"
+    },
+    {
+      "id": "sports-ground",
+      "label": "Sports Ground",
+      "kind": "place",
+      "x": 1240,
+      "y": 860,
+      "zone": "sports",
+      "category": "sport",
+      "aliases": [
+        "playground",
+        "ground",
+        "oval"
+      ]
+    },
+    {
+      "id": "courts",
+      "label": "Basketball Courts",
+      "kind": "place",
+      "x": 1420,
+      "y": 760,
+      "zone": "sports",
+      "category": "sport",
+      "minor": true
+    },
+    {
+      "id": "j-south-w",
+      "label": "south w",
+      "kind": "junction",
+      "x": 620,
+      "y": 900,
+      "zone": "living"
+    },
+    {
+      "id": "j-south-c",
+      "label": "south c",
+      "kind": "junction",
+      "x": 800,
+      "y": 780,
+      "zone": "services"
+    },
+    {
+      "id": "j-south-e",
+      "label": "south e",
+      "kind": "junction",
+      "x": 1060,
+      "y": 850,
+      "zone": "sports"
+    },
+    {
+      "id": "j-sports-n",
+      "label": "sports n",
+      "kind": "junction",
+      "x": 1240,
+      "y": 740,
+      "zone": "sports"
+    },
+    {
+      "id": "atm",
+      "label": "ATM",
+      "kind": "place",
+      "x": 1000,
+      "y": 170,
+      "zone": "services",
+      "category": "money",
+      "aliases": [
+        "cash point"
+      ],
+      "minor": true
+    },
+    {
+      "id": "restroom-n",
+      "label": "Restrooms (North)",
+      "kind": "place",
+      "x": 680,
+      "y": 220,
+      "zone": "services",
+      "category": "restroom",
+      "minor": true
+    },
+    {
+      "id": "restroom-s",
+      "label": "Restrooms (South)",
+      "kind": "place",
+      "x": 940,
+      "y": 850,
+      "zone": "services",
+      "category": "restroom",
+      "minor": true
+    },
+    {
+      "id": "clinic",
+      "label": "Health Centre",
+      "kind": "place",
+      "x": 1000,
+      "y": 780,
+      "zone": "services",
+      "category": "health",
+      "aliases": [
+        "medical centre",
+        "infirmary"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-gate-north--j-gate-n",
+      "from": "gate-north",
+      "to": "j-gate-n",
+      "metres": 110,
+      "attrs": {
+        "crowd": 0.35
+      }
+    },
+    {
+      "id": "e-j-gate-n--j-park",
+      "from": "j-gate-n",
+      "to": "j-park",
+      "attrs": {
+        "shaded": true
+      }
+    },
+    {
+      "id": "e-j-gate-n--j-east-n",
+      "from": "j-gate-n",
+      "to": "j-east-n",
+      "attrs": {
+        "crowd": 0.25
+      }
+    },
+    {
+      "id": "e-j-park--parking",
+      "from": "j-park",
+      "to": "parking",
+      "metres": 130,
+      "attrs": {
+        "crowd": 0.3
+      }
+    },
+    {
+      "id": "e-atm--j-east-n",
+      "from": "atm",
+      "to": "j-east-n",
+      "attrs": {
+        "crowd": 0.3
+      }
+    },
+    {
+      "id": "e-parking--j-quad-w",
+      "from": "parking",
+      "to": "j-quad-w",
+      "attrs": {
+        "shaded": true,
+        "slope": 0.02
+      }
+    },
+    {
+      "id": "e-j-east-n--j-acad-n",
+      "from": "j-east-n",
+      "to": "j-acad-n",
+      "attrs": {
+        "crowd": 0.4
+      }
+    },
+    {
+      "id": "e-j-gate-n--j-quad-n",
+      "from": "j-gate-n",
+      "to": "j-quad-n",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.55
+      }
+    },
+    {
+      "id": "e-j-quad-n--j-quad-w",
+      "from": "j-quad-n",
+      "to": "j-quad-w",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.4
+      }
+    },
+    {
+      "id": "e-j-quad-n--j-quad-c",
+      "from": "j-quad-n",
+      "to": "j-quad-c",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.65
+      }
+    },
+    {
+      "id": "e-j-quad-w--j-quad-c",
+      "from": "j-quad-w",
+      "to": "j-quad-c",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-j-quad-n--restroom-n",
+      "from": "j-quad-n",
+      "to": "restroom-n",
+      "attrs": {
+        "shaded": true
+      }
+    },
+    {
+      "id": "e-restroom-n--j-quad-w",
+      "from": "restroom-n",
+      "to": "j-quad-w",
+      "attrs": {
+        "shaded": true
+      }
+    },
+    {
+      "id": "e-j-quad-w--reading-garden",
+      "from": "j-quad-w",
+      "to": "reading-garden",
+      "attrs": {
+        "surface": "grass"
+      }
+    },
+    {
+      "id": "e-reading-garden--j-quad-c",
+      "from": "reading-garden",
+      "to": "j-quad-c",
+      "attrs": {
+        "lit": false,
+        "surface": "grass"
+      }
+    },
+    {
+      "id": "e-library--j-quad-c",
+      "from": "library",
+      "to": "j-quad-c",
+      "attrs": {
+        "stairs": true,
+        "stepFree": false,
+        "crowd": 0.75,
+        "surface": "stairs"
+      }
+    },
+    {
+      "id": "e-library-door--j-quad-c",
+      "from": "library-door",
+      "to": "j-quad-c",
+      "attrs": {
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-library-door--j-acad-c",
+      "from": "library-door",
+      "to": "j-acad-c",
+      "attrs": {
+        "crowd": 0.3
+      }
+    },
+    {
+      "id": "e-j-quad-n--j-acad-n",
+      "from": "j-quad-n",
+      "to": "j-acad-n",
+      "attrs": {
+        "crowd": 0.45
+      }
+    },
+    {
+      "id": "e-j-acad-n--block-a",
+      "from": "j-acad-n",
+      "to": "block-a",
+      "attrs": {
+        "stairs": true,
+        "stepFree": false,
+        "crowd": 0.6,
+        "surface": "stairs"
+      }
+    },
+    {
+      "id": "e-block-a--j-acad-c",
+      "from": "block-a",
+      "to": "j-acad-c",
+      "attrs": {
+        "stairs": true,
+        "stepFree": false,
+        "surface": "stairs"
+      }
+    },
+    {
+      "id": "e-j-acad-c--block-b",
+      "from": "j-acad-c",
+      "to": "block-b",
+      "attrs": {
+        "crowd": 0.55
+      }
+    },
+    {
+      "id": "e-block-b--j-acad-s",
+      "from": "block-b",
+      "to": "j-acad-s",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-acad-c--j-acad-s",
+      "from": "j-acad-c",
+      "to": "j-acad-s",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.45
+      }
+    },
+    {
+      "id": "e-j-acad-s--block-c",
+      "from": "j-acad-s",
+      "to": "block-c",
+      "attrs": {
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-j-labs--labs",
+      "from": "j-labs",
+      "to": "labs",
+      "attrs": {}
+    },
+    {
+      "id": "e-block-a--j-labs",
+      "from": "block-a",
+      "to": "j-labs",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-acad-n--j-labs",
+      "from": "j-acad-n",
+      "to": "j-labs",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-quad-c--j-quad-s",
+      "from": "j-quad-c",
+      "to": "j-quad-s",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-j-quad-sw--j-quad-s",
+      "from": "j-quad-sw",
+      "to": "j-quad-s",
+      "attrs": {
+        "crowd": 0.3
+      }
+    },
+    {
+      "id": "e-reading-garden--j-quad-sw",
+      "from": "reading-garden",
+      "to": "j-quad-sw",
+      "attrs": {
+        "lit": false,
+        "surface": "grass"
+      }
+    },
+    {
+      "id": "e-j-quad-sw--admin",
+      "from": "j-quad-sw",
+      "to": "admin",
+      "attrs": {
+        "surface": "gravel"
+      }
+    },
+    {
+      "id": "e-j-quad-s--j-acad-s",
+      "from": "j-quad-s",
+      "to": "j-acad-s",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.4
+      }
+    },
+    {
+      "id": "e-j-quad-sw--j-hostel-n",
+      "from": "j-quad-sw",
+      "to": "j-hostel-n",
+      "attrs": {
+        "slope": -0.03
+      }
+    },
+    {
+      "id": "e-j-hostel-n--hostel-1",
+      "from": "j-hostel-n",
+      "to": "hostel-1",
+      "attrs": {
+        "crowd": 0.45
+      }
+    },
+    {
+      "id": "e-j-hostel-n--j-mess",
+      "from": "j-hostel-n",
+      "to": "j-mess",
+      "attrs": {
+        "shaded": true,
+        "crowd": 0.7
+      }
+    },
+    {
+      "id": "e-j-mess--cafeteria",
+      "from": "j-mess",
+      "to": "cafeteria",
+      "attrs": {
+        "crowd": 0.9
+      }
+    },
+    {
+      "id": "e-cafeteria--j-living-e",
+      "from": "cafeteria",
+      "to": "j-living-e",
+      "attrs": {
+        "crowd": 0.6
+      }
+    },
+    {
+      "id": "e-j-mess--j-south-w",
+      "from": "j-mess",
+      "to": "j-south-w",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-south-w--j-south-c",
+      "from": "j-south-w",
+      "to": "j-south-c",
+      "attrs": {
+        "crowd": 0.35
+      }
+    },
+    {
+      "id": "e-hostel-2--j-mess",
+      "from": "hostel-2",
+      "to": "j-mess",
+      "attrs": {
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-j-living-e--j-quad-s",
+      "from": "j-living-e",
+      "to": "j-quad-s",
+      "attrs": {
+        "crowd": 0.4
+      }
+    },
+    {
+      "id": "e-j-living-e--j-south-c",
+      "from": "j-living-e",
+      "to": "j-south-c",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-south-c--gate-south",
+      "from": "j-south-c",
+      "to": "gate-south",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-south-w--gate-south",
+      "from": "j-south-w",
+      "to": "gate-south",
+      "attrs": {
+        "lit": false
+      }
+    },
+    {
+      "id": "e-j-south-c--clinic",
+      "from": "j-south-c",
+      "to": "clinic",
+      "attrs": {
+        "crowd": 0.3
+      }
+    },
+    {
+      "id": "e-clinic--j-south-e",
+      "from": "clinic",
+      "to": "j-south-e",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-acad-s--clinic",
+      "from": "j-acad-s",
+      "to": "clinic",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-south-e--sports-ground",
+      "from": "j-south-e",
+      "to": "sports-ground",
+      "attrs": {
+        "crowd": 0.5
+      }
+    },
+    {
+      "id": "e-sports-ground--j-sports-n",
+      "from": "sports-ground",
+      "to": "j-sports-n",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-sports-n--j-acad-s",
+      "from": "j-sports-n",
+      "to": "j-acad-s",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-sports-n--courts",
+      "from": "j-sports-n",
+      "to": "courts",
+      "attrs": {}
+    },
+    {
+      "id": "e-sports-ground--courts",
+      "from": "sports-ground",
+      "to": "courts",
+      "attrs": {}
+    },
+    {
+      "id": "e-j-south-e--gate-south",
+      "from": "j-south-e",
+      "to": "gate-south",
+      "attrs": {
+        "shaded": true
+      }
+    },
+    {
+      "id": "e-j-south-e--restroom-s",
+      "from": "j-south-e",
+      "to": "restroom-s",
+      "attrs": {}
+    },
+    {
+      "id": "e-restroom-s--gate-south",
+      "from": "restroom-s",
+      "to": "gate-south",
+      "attrs": {}
+    }
+  ],
+  "buildings": [
+    {
+      "id": "b-library",
+      "label": "Central Library",
+      "zone": "learning",
+      "footprint": [
+        [
+          814,
+          341
+        ],
+        [
+          984,
+          341
+        ],
+        [
+          984,
+          460
+        ],
+        [
+          814,
+          460
+        ]
+      ],
+      "entryNodeIds": [
+        "library",
+        "library-door"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-block-a",
+      "label": "Academic Block A",
+      "zone": "academic",
+      "footprint": [
+        [
+          1095,
+          344
+        ],
+        [
+          1265,
+          344
+        ],
+        [
+          1265,
+          464
+        ],
+        [
+          1095,
+          464
+        ]
+      ],
+      "entryNodeIds": [
+        "block-a"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-block-b",
+      "label": "Academic Block B",
+      "zone": "academic",
+      "footprint": [
+        [
+          1095,
+          514
+        ],
+        [
+          1265,
+          514
+        ],
+        [
+          1265,
+          634
+        ],
+        [
+          1095,
+          634
+        ]
+      ],
+      "entryNodeIds": [
+        "block-b"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-block-c",
+      "label": "Academic Block C",
+      "zone": "academic",
+      "footprint": [
+        [
+          1194,
+          634
+        ],
+        [
+          1296,
+          634
+        ],
+        [
+          1296,
+          706
+        ],
+        [
+          1194,
+          706
+        ]
+      ],
+      "entryNodeIds": [
+        "block-c"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-labs",
+      "label": "Research Labs",
+      "zone": "academic",
+      "footprint": [
+        [
+          1414,
+          275
+        ],
+        [
+          1544,
+          275
+        ],
+        [
+          1544,
+          385
+        ],
+        [
+          1414,
+          385
+        ]
+      ],
+      "entryNodeIds": [
+        "labs"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-admin",
+      "label": "Administration Block",
+      "zone": "learning",
+      "footprint": [
+        [
+          446,
+          510
+        ],
+        [
+          586,
+          510
+        ],
+        [
+          586,
+          610
+        ],
+        [
+          446,
+          610
+        ]
+      ],
+      "entryNodeIds": [
+        "admin"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-hostel-1",
+      "label": "Hostel Block 1",
+      "zone": "living",
+      "footprint": [
+        [
+          96,
+          645
+        ],
+        [
+          246,
+          645
+        ],
+        [
+          246,
+          755
+        ],
+        [
+          96,
+          755
+        ]
+      ],
+      "entryNodeIds": [
+        "hostel-1"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-hostel-2",
+      "label": "Hostel Block 2",
+      "zone": "living",
+      "footprint": [
+        [
+          96,
+          825
+        ],
+        [
+          246,
+          825
+        ],
+        [
+          246,
+          935
+        ],
+        [
+          96,
+          935
+        ]
+      ],
+      "entryNodeIds": [
+        "hostel-2"
+      ],
+      "levels": 4
+    },
+    {
+      "id": "b-cafeteria",
+      "label": "Cafeteria",
+      "zone": "living",
+      "footprint": [
+        [
+          534,
+          676
+        ],
+        [
+          669,
+          676
+        ],
+        [
+          669,
+          766
+        ],
+        [
+          534,
+          766
+        ]
+      ],
+      "entryNodeIds": [
+        "cafeteria"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-clinic",
+      "label": "Health Centre",
+      "zone": "services",
+      "footprint": [
+        [
+          1014,
+          735
+        ],
+        [
+          1124,
+          735
+        ],
+        [
+          1124,
+          825
+        ],
+        [
+          1014,
+          825
+        ]
+      ],
+      "entryNodeIds": [
+        "clinic"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-atm",
+      "label": "ATM",
+      "zone": "services",
+      "footprint": [
+        [
+          955,
+          86
+        ],
+        [
+          1045,
+          86
+        ],
+        [
+          1045,
+          156
+        ],
+        [
+          955,
+          156
+        ]
+      ],
+      "entryNodeIds": [
+        "atm"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-restroom-n",
+      "label": "Restrooms (North)",
+      "zone": "services",
+      "footprint": [
+        [
+          694,
+          190
+        ],
+        [
+          774,
+          190
+        ],
+        [
+          774,
+          250
+        ],
+        [
+          694,
+          250
+        ]
+      ],
+      "entryNodeIds": [
+        "restroom-n"
+      ],
+      "levels": 2
+    },
+    {
+      "id": "b-restroom-s",
+      "label": "Restrooms (South)",
+      "zone": "services",
+      "footprint": [
+        [
+          846,
+          820
+        ],
+        [
+          926,
+          820
+        ],
+        [
+          926,
+          880
+        ],
+        [
+          846,
+          880
+        ]
+      ],
+      "entryNodeIds": [
+        "restroom-s"
+      ],
+      "levels": 2
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "s-parking",
+      "label": "Visitor Parking",
+      "kind": "parking",
+      "ring": [
+        [
+          395,
+          16
+        ],
+        [
+          605,
+          16
+        ],
+        [
+          605,
+          116
+        ],
+        [
+          395,
+          116
+        ]
+      ]
+    },
+    {
+      "id": "s-sports-ground",
+      "label": "Sports Ground",
+      "kind": "lawn",
+      "ring": [
+        [
+          1254,
+          795
+        ],
+        [
+          1424,
+          795
+        ],
+        [
+          1424,
+          925
+        ],
+        [
+          1254,
+          925
+        ]
+      ]
+    },
+    {
+      "id": "s-courts",
+      "label": "Basketball Courts",
+      "kind": "plaza",
+      "ring": [
+        [
+          1434,
+          715
+        ],
+        [
+          1554,
+          715
+        ],
+        [
+          1554,
+          805
+        ],
+        [
+          1434,
+          805
+        ]
+      ]
+    },
+    {
+      "id": "s-reading-garden",
+      "label": "Reading Garden",
+      "kind": "lawn",
+      "ring": [
+        [
+          456,
+          345
+        ],
+        [
+          586,
+          345
+        ],
+        [
+          586,
+          455
+        ],
+        [
+          456,
+          455
+        ]
+      ]
+    },
+    {
+      "id": "s-quad",
+      "label": "Learning Square",
+      "kind": "plaza",
+      "ring": [
+        [
+          640,
+          260
+        ],
+        [
+          960,
+          260
+        ],
+        [
+          960,
+          640
+        ],
+        [
+          640,
+          640
+        ]
+      ]
+    },
+    {
+      "id": "s-water",
+      "label": "Reflection Pool",
+      "kind": "water",
+      "ring": [
+        [
+          700,
+          545
+        ],
+        [
+          760,
+          545
+        ],
+        [
+          760,
+          600
+        ],
+        [
+          700,
+          600
+        ]
+      ]
+    },
+    {
+      "id": "s-forecourt",
+      "label": "North Forecourt",
+      "kind": "plaza",
+      "ring": [
+        [
+          620,
+          90
+        ],
+        [
+          780,
+          90
+        ],
+        [
+          780,
+          150
+        ],
+        [
+          620,
+          150
+        ]
+      ]
+    },
+    {
+      "id": "s-green",
+      "label": "North Lawn",
+      "kind": "lawn",
+      "ring": [
+        [
+          70,
+          200
+        ],
+        [
+          420,
+          200
+        ],
+        [
+          420,
+          560
+        ],
+        [
+          70,
+          560
+        ]
+      ]
+    }
+  ]
 }

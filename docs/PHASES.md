@@ -203,3 +203,45 @@ comment text had produced a false alarm in three consecutive checkpoints.
 - A short list of reachable-but-uncovered branches (the `from`-side arm of the unknown-endpoint
   checks, `removeEdge` on a one-way edge, `lookup` on an unregistered word, `members` out of
   range) is itemised in the PR description instead of being quietly deleted from it.
+
+### Phase 2 — campus model, validator, map · in progress
+
+**Checkpoint 1 — the dataset and its schema · 2026-11-01**
+
+`src/data/campus.json` is now a synthetic-but-plausible Amrita Bengaluru layout: **39 nodes**
+(19 named places, 19 junctions, 1 `entrance`), **56 edges**, 13 buildings, 8 surfaces, all six
+zones. One connected component, **17 independent cycles**, edges 80–279 m, two hand-written
+`metres` and the rest derived from coordinates so both code paths are exercised. The place list is
+the brief's: two gates, three academic blocks, library, cafeteria, two hostels, sports ground,
+parking, ATM, two restrooms, plus admin/clinic/labs/courts/garden so no zone is a single dot.
+
+The file was **generated and checked, not typed and admired**. A scratch authoring script
+(`campus.json` is committed; the script is not) measures every edge, tests every pair of segments for
+a crossing, runs union-find for components and counts cycles, and refuses to accept a layout with
+two labels 40 px apart. Building footprints are not hand-placed: each starts at its desired size and
+shrinks around the eight directions until it clears every node that is not its door, every walkway it
+is not attached to, and every block already placed. That loop is what produced the first honest
+version of this map — and it reported, before anything rendered, that three walkways crossed, three
+edges were longer than 400 m, three node pairs overlapped, and twelve blocks sat on top of paths.
+
+`docs/SCHEMA.md` is the field-by-field reference (units, defaults, derived values, and one code per
+issue for the validator to report). `docs/MAP-DATA.md` keeps the workflow and now defers to it.
+
+**The type system disagreed with itself, and lost.** `campus.types.ts` has always claimed "nothing is
+a literal union" — and then declared `kind`, `attrs.surface` and `SurfaceSpec.kind` as literal unions
+and the footprint rings as `[number, number][]`. With Phase 0's empty placeholder arrays that
+contradiction was invisible: `never[]` satisfies anything. The first real node in the file exposed it,
+because a `.json` import is typed by *widening* — every string becomes `string`, every array becomes
+`T[]` — so a literal union or a tuple in the raw-file types is not strict, it is **unsatisfiable**.
+Those four fields are now `string`/`number[][]` with the narrowing moved to the validator, and
+`docs/SCHEMA.md` states the rule ("declare only what a JSON file can prove") so it cannot drift back.
+What the compiler gives up, the error messages gain: bad data now fails `map:validate` with a sentence
+a data editor can act on rather than a 40-line assignability trace inside a file nobody edits.
+
+**One rule moved from error to warning while writing them.** "An edge between two non-junction
+places" was listed as build-breaking in Phase 0's draft. It cannot stay an error: the campus has real
+plaza connections (`sports-ground`–`courts`, `restroom-s`–`gate-south`) and forbidding them means
+inventing a fake junction node per crossing just to satisfy a checker. It is now warning
+`place-to-place`, and the placeholder keeps both instances so the warning path is exercised by data
+rather than by a fixture. A shadow implementation of every documented rule — run over the committed
+file before the TypeScript validator existed — returned 0 errors, 2 warnings, those two.

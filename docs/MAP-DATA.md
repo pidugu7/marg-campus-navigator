@@ -54,13 +54,24 @@ function over them, not a new algorithm.
 
 ## Validation (Phase 2, `npm run map:validate`)
 
-Errors, i.e. build-breaking: unknown node/edge ids, self-loops, duplicate ids,
-`metres <= 0` or non-finite coordinates, `crowd` outside 0–1, an edge whose endpoints are
-both non-junction places, a building with no reachable entrance.
+[`docs/SCHEMA.md`](SCHEMA.md) holds the full matrix — one code per issue, severity, and the exact
+trigger. In short:
 
-Warnings: isolated nodes, a node outside the canvas, a disconnected component (reported
-with its size — union-find answers that in near-linear time), a building whose footprint is
-not a simple ring.
+Errors, i.e. build-breaking: unreadable `schemaVersion`, a missing top-level block, duplicate ids
+(anywhere in the file, one flat name space), unknown node/edge ids, self-loops, `metres <= 0` or
+non-finite coordinates, `crowd` outside 0–1, a building with no reachable entrance, an empty graph.
+
+Warnings, i.e. printed but passable: isolated nodes, a node outside the canvas, a disconnected
+component (reported with its size — union-find answers that in near-linear time), a building whose
+footprint is not a simple ring, a stated length that disagrees with the coordinates by over 15%,
+and an edge whose endpoints are both non-junction places.
+
+That last one started life as an error. It is a warning because real campuses have plazas between
+two buildings, and forbidding the edge would force a fake junction node into the data just to satisfy
+the checker — a placeholder vertex that search would never show and routing would pass through. The
+cost of allowing it is a vaguer turn instruction, so it is reported rather than rejected. The shipped
+placeholder deliberately keeps two of them (`sports-ground`–`courts`, `restroom-s`–`gate-south`) so
+the warning path is exercised by real data, not only by a fixture.
 
 ## Replacing the placeholder with the real campus
 
