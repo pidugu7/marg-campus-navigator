@@ -192,11 +192,13 @@ the app cannot disagree, because they are the same function.
 | `duplicate-id` | error | Any id repeated anywhere in the file. |
 | `unknown-ref` | error | Edge `from`/`to` or `entryNodeIds` naming a node that does not exist. |
 | `unknown-zone` | error | A `zone` value with no `zones[]` entry. |
-| `bad-number` | error | Non-finite or missing coordinate, or non-finite/`<= 0` `metres`, or non-finite canvas. |
+| `bad-id` | error | An id that is empty, not a string, or contains whitespace. |
+| `bad-number` | error | A non-finite or missing coordinate, or `metres` that is not a finite number > 0, or two nodes at one point where the derived length would be 0. |
+| `bad-canvas` | error | `width`/`height`/`pixelsPerMetre` not finite and > 0. The canvas is the divisor of every derived length, so it is repaired to 1 unit = 1 m for the rest of the report rather than poisoning every edge with a second complaint. |
 | `bad-kind` | error | `node.kind` outside the four values. |
 | `bad-surface` | error | `surfaces[].kind` outside the five ground types, or `attrs.surface` outside the five walkway types. |
-| `bad-attr` | error | An `attrs` flag that is not a boolean, `slope` not finite, or `stairs: true` together with `stepFree: true`. |
-| `crowd-range` | error | `attrs.crowd` outside `0..1`. |
+| `bad-attr` | error | An `attrs` flag that is not a boolean, `attrs` itself not an object, `slope` not finite or outside -1..1, or `stairs: true` together with `stepFree: true`. |
+| `crowd-range` | error | `attrs.crowd` that is not a finite number in `0..1`. Reported here rather than left to the engine, which spreads attributes without checking them: a clamp or a pass-through would turn a typo into a plausible route, and the difference is what the `quiet` profile is graded on. |
 | `self-loop` | error | `from === to`. |
 | `no-entrance` | error | Building with an empty `entryNodeIds`. |
 | `entrance-unreachable` | error | Entrance node with no incident edge. |
@@ -210,9 +212,45 @@ the app cannot disagree, because they are the same function.
 | `length-mismatch` | warning | Stated `metres` more than 15% from the derived length. |
 | `non-simple-ring` | warning | Footprint or surface ring that crosses itself. |
 
-Message shape, always: `` <severity>: <code>: <what is wrong> [<the ids involved>] `` — one line per
-issue, ids quoted exactly as written so a search-and-replace fixes them, and a final
-`N errors, M warnings (file, schemaVersion)`. Exit `1` if `N > 0`.
+Every message reads `` <severity>: <code>: <what is wrong> [<id to fix>] `` — one line per issue, the
+offending id quoted exactly as written so search-and-replace finds it, and a final
+`N errors, M warnings (file)`. Issues are sorted errors first, then by code, then by id, then by text,
+so two runs on one file produce a report that diffs cleanly.
+
+### What is *not* reported
+
+`validateGraph` from the engine is deliberately not called on this path. Its checks are either ones the
+builder has already settled (ids, self-loops, lengths, coordinates) or ones it needs the file's canvas
+and raw `attrs` for, so from here it could only ever print `duplicate-node-id` for a name the
+`duplicate-id` line already named. It stays in the API for Phase 7's map editor, which holds a graph in
+memory and never has a file: that is where a graph-level validator has work to do. The split is by
+reachability, not by taste — a check that cannot fire is a check someone has to read and test.
+
+### Cascade policy
+
+A file is read once, and the read that matters is the *first* defect. So:
+
+- a node with unusable coordinates is dropped, and every edge touching it is dropped **silently**:
+  `edge "e-7" refers to node "fountain", which is not in "nodes"` would be describing the repair, not
+  the file;
+- a row that is not an object is reported at its index (`nodes[3]`) and skipped, rather than yielding
+  one complaint per field about `undefined`;
+- `isolated-node`, `outside-canvas`, `disconnected-component` and `entrance-unreachable` measure
+  *completeness*. None is produced while any error exists, because dropping entries makes all four
+  trivially true. Fix the errors and they are reported again, and then they mean something.
+
+### Exit codes
+
+`npm run map:validate` is a CI gate, so its numbers are part of the contract:
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | no errors (warnings pass, unless `--strict`) |
+| 1 | at least one error; or warnings, under `--strict` |
+| 2 | the file could not be read or parsed at all — "the checkout is wrong", which must not look like "the data is wrong" |
+
+`--json` replaces the prose with `{ source, ok, issues, errors, warnings, summary }` on stdout alone,
+and `--quiet` drops the summary header. `--help` prints the usage and exits 0.
 
 ## Why the TypeScript types are looser than this document
 
@@ -260,4 +298,5 @@ The smallest input the validator accepts, useful as a fixture when the rules are
 ```
 
 Three nodes and two edges is enough to prove a graph built, which is why no lower bound is enforced
-beyond `empty-graph`.
+beyond `empty-graph`. `zones: []` is legal, and yields one `missing-zone` warning per node rather than
+an error: a routing graph does not need zones, only a coloured map does.

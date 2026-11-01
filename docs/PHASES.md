@@ -245,3 +245,60 @@ inventing a fake junction node per crossing just to satisfy a checker. It is now
 `place-to-place`, and the placeholder keeps both instances so the warning path is exercised by data
 rather than by a fixture. A shadow implementation of every documented rule — run over the committed
 file before the TypeScript validator existed — returned 0 errors, 2 warnings, those two.
+
+**Checkpoint 2 — the adapter, the CLI, and one spec per failure · 2026-11-01**
+
+`src/data/build-graph.ts` (640 lines) is the only file that reads the data's values, and it splits the
+work in two: `validateCampusFile(source)` answers *"what is wrong with this file"* and `buildGraph(source)`
+answers *"and here is the graph the good rows describe"`. Both run one `analyse` pass, so the report and
+the map can never disagree about which rows were usable. 24 issue codes, one per thing that can be wrong,
+**82 specs** — one per code, each asserting the code, the severity, and that the message names the id to
+go and fix.
+
+`npm run map:validate` runs the same function from a terminal, through Vite's SSR loader rather than a
+second implementation in `.mjs`: the rules are TypeScript that reach the engine via `@/engine`, and a
+validator that disagrees with the app about what is broken is worse than no validator. Exit codes are part
+of the contract — 0 clean, 1 errors, 2 "the file never arrived", with `--strict` promoting warnings and
+`--json` for CI. Tested as a *command* (`src/test/validate-map.spec.ts`, 5 cases) because an exit code is
+not reachable from a unit test of the rules.
+
+**Three things this checkpoint produced that the plan had not.**
+
+1. **The engine's `createGraph` throws where a file needs a report.** `addNode`/`addEdge` raise
+   `TypeError` for a duplicate id, a self-loop, a dangling endpoint, a non-finite coordinate and a length
+   ≤ 0 — correct for graphs built by code. So the adapter pre-clears all five, and `build-graph.ts` has no
+   `try`/`catch`: after the pre-clear there is no reachable throw, and catching one would both be
+   untestable and hide the bug it claims to survive. This is also why `validateGraph` is *not* called on
+   this path — from here it could report nothing — and `docs/SCHEMA.md` now states that split explicitly
+   ("a check that cannot fire is a check someone has to read and test").
+2. **`docs/SCHEMA.md`'s "an edge between two non-junction places is an error" could not be implemented as
+   written**, so checkpoint 1 moved it to warning `place-to-place`, and the shipped file keeps two of them
+   to exercise the path. While writing the CLI I found the second half of that decision: an *entrance*
+   whose node had been dropped for bad coordinates produced `entrance-unreachable` too — my repair,
+   reported as the file's problem. It joined the three completeness warnings that are suppressed while any
+   error exists, which is now a documented rule rather than an emergent one.
+3. **A drift test found a missing test.** `MAP_ISSUE_CODES` is a value, not just a union, and
+   `src/test/schema-drift.spec.ts` asserts every code has a row in `docs/SCHEMA.md`'s matrix (with the
+   severity the doc claims, so a silent error→warning downgrade fails CI) *and* a case in the spec file.
+   It failed on its first run: `disconnected-component` had no spec. Now it has one that asserts the
+   message's "2 separate networks of 3, 2 nodes" — the exact claim union-find is making — and that the
+   connected part still routes.
+
+**Coverage, since the numbers moved.** `coverage.include` now covers `src/data/**` as well as
+`src/engine/**`, because a validator with 82 specs and no reported coverage is a report describing half
+the tested code. `build-graph.ts` is at 100% statements / 99.65% branches / 100% lines; the one uncovered
+arm is the "ring has fewer than two points" side of a guard in `ringSides`, unreachable because
+`checkRing` has already required at least three. Engine numbers are unchanged from Phase 1 (97.82%
+statements / 86.37% branches in `structures`, 100% in `engine/`). Reaching that shape removed four
+branches by *deletion* rather than by testing: the builder no longer re-derives an edge's length (so its
+impossible `metres <= 0` guard is gone), no longer re-looks-up endpoints (`resolveEdge` returns the
+resolved nodes), and footprint rings are `[number, number]` tuples so the geometry needs eight fewer
+`?? 0` fallbacks that `noUncheckedIndexedAccess` would otherwise demand and nothing could reach.
+
+```
+npm run typecheck   → tsc -b, 3 projects, 0 errors
+npm run lint        → eslint ., 0 problems
+npm test            → 10 files, 185 tests passed
+npm run map:validate  → 0 errors, 2 warnings, exit 0 (the two intentional place-to-place edges)
+npm run build       → ok (App.tsx still untouched: no UI in this checkpoint)
+```

@@ -29,7 +29,8 @@ Other commands:
 | Command | What it does |
 | --- | --- |
 | `npm test` | run every unit + architecture test |
-| `npm run test:coverage` | engine coverage report (`coverage/`) |
+| `npm run map:validate` | checks `src/data/campus.json` against `docs/SCHEMA.md`; exit 0 clean, 1 errors, 2 unreadable file. `--strict` fails on warnings too, `--json` prints the issue list |
+| `npm run test:coverage` | coverage report for the engine and the data layer (`coverage/`) |
 | `npm run lint` | ESLint, including the "no graph libraries" ban |
 | `npm run typecheck` | `tsc -b` over three projects (app, test, node) |
 | `npm run build` | production build to `dist/` |

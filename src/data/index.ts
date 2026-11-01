@@ -9,6 +9,22 @@
 import campusJson from './campus.json'
 import type { CampusFile, DataStatus } from './campus.types'
 
+export {
+  MAP_ISSUE_CODES,
+  MAP_SCHEMA_MAJOR,
+  buildGraph,
+  deriveMetres,
+  formatCampusReport,
+  isUsableId,
+  validateCampusFile,
+  type CampusModel,
+  type CampusReport,
+  type CampusSummary,
+  type MapIssue,
+  type MapIssueCode,
+  type MapIssueSeverity,
+} from './build-graph'
+
 /** Typed at the boundary: the JSON has to satisfy the schema or the build fails. */
 export const campus: CampusFile = campusJson
 
@@ -22,6 +38,9 @@ export const canvasSpec = campusJson.canvas
  */
 export const DATA_STATUSES: readonly DataStatus[] = ['synthetic-placeholder', 'digitised', 'surveyed']
 
+/* The data layer's own contract, re-exported so a component can type a report without reaching
+   past the barrel — `src/ui/**` is not allowed to import `./build-graph` directly any more than it
+   may import `@/engine`. */
 export type {
   BuildingSpec,
   CampusFile,

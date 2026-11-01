@@ -63,15 +63,20 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json-summary', 'html'],
-        include: ['src/engine/**'],
+        // The data layer's validator is in scope from Phase 2: it is decision logic with 66 specs
+        // behind it, and leaving it out would make the report describe only half the tested code.
+        include: ['src/engine/**', 'src/data/**'],
         exclude: [
           'src/engine/**/*.test.ts',
           'src/engine/**/*.spec.ts',
           'src/engine/**/helpers.ts',
+          'src/data/**/*.spec.ts',
           // Type-only surfaces: neither file contains a runtime statement, so v8 reports 0/0 and
           // renders it as 0%, which drags the aggregate down while saying nothing about tests.
           'src/engine/index.ts',
           'src/engine/types.ts',
+          'src/data/campus.types.ts',
+          'src/data/campus.json',
         ],
       },
     },
