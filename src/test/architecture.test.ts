@@ -31,7 +31,9 @@ interface SourceFile {
   /** POSIX-style path relative to the repo root, e.g. `src/engine/index.ts`. */
   rel: string
   raw: string
-  /** Comments and string literals removed, so scans hit code and not prose. */
+  /** Comments removed, string literals kept — the text specifiers are read from. */
+  prose: string
+  /** Comments and string literals removed, so identifier scans hit code and not prose. */
   code: string
   isTest: boolean
 }
@@ -44,20 +46,39 @@ const walk = (dir: string, exts: readonly string[]): string[] => {
   return found.filter((name) => exts.some((ext) => name.endsWith(ext))).map((name) => join(dir, name))
 }
 
-const stripNoise = (text: string): string =>
+const stripComments = (text: string): string =>
   text
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1 ')
+
+/** Comments *and* string literals removed: identifier scans must not see prose or literals. */
+const stripNoise = (text: string): string =>
+  stripComments(text)
     .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``')
     .replace(/'(?:\\[\s\S]|[^'\\\n])*'/g, "''")
     .replace(/"(?:\\[\s\S]|[^"\\\n])*"/g, '""')
 
+/**
+ * Which modules a file references, read from `prose` (comments gone, string literals kept).
+ *
+ * Three rounds of false alarms shaped this. A doc comment saying `indistinguishable from
+ * "not added yet"` matched a bare `from "…"` scan, then a template literal in a test message did,
+ * then a union-find header line wrapping across `"no route exists" from "no route was found"`.
+ * Each one cost the same thing: the moment a guard cries wolf, the next engineer adds an
+ * exception instead of fixing a bug. So every pattern is anchored to the start of an
+ * `import`/`export` *statement*, and `[^'"]*?` forbids crossing a quote before `from` — a string
+ * literal can no longer look like a specifier, while a multi-line `import type { … } from '…'`
+ * still matches.
+ *
+ * Stated rather than hidden: `import("…")` and `require("…")` are matched by keyword, not by line
+ * anchor, so a comment that spells one out verbatim still registers. That is the safe direction —
+ * a false alarm costs a minute, a miss costs the separation claim the whole project rests on.
+ */
 const SPECIFIER_PATTERNS = [
-  /\bfrom\s*['"]([^'"]+)['"]/g,
-  /\bimport\s*['"]([^'"]+)['"]/g,
+  /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?[^'"]*?\bfrom\s*['"]([^'"]+)['"]/g,
+  /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g,
   /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
   /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  /\bexport\s*\*\s*from\s*['"]([^'"]+)['"]/g,
 ]
 
 const importsOf = (raw: string): string[] => {
@@ -81,6 +102,7 @@ const load = (): SourceFile[] =>
       return {
         rel,
         raw,
+        prose: stripComments(raw),
         code: stripNoise(raw),
         isTest: /\.(test|spec)\.tsx?$/.test(rel),
       }
@@ -106,7 +128,7 @@ describe('engine independence', () => {
   it('imports nothing but its own modules (vitest allowed in its specs)', () => {
     const violations: string[] = []
     for (const file of engineFiles) {
-      for (const spec of importsOf(file.raw)) {
+      for (const spec of importsOf(file.prose)) {
         if (isRelative(spec)) continue
         if (file.isTest && spec === 'vitest') continue
         if (ENGINE_BANNED_IMPORT_PREFIXES.some((banned) => spec === banned || spec.startsWith(`${banned}/`))) {
@@ -148,7 +170,7 @@ describe('layer boundaries', () => {
     const violations: string[] = []
     for (const file of files) {
       if (ENGINE_CONSUMERS_ALLOWED.some((allowed) => file.rel.startsWith(allowed))) continue
-      for (const spec of importsOf(file.raw)) {
+      for (const spec of importsOf(file.prose)) {
         if (/(^|\/)engine(\/|$)/.test(spec)) violations.push(`${file.rel} -> ${spec}`)
       }
     }
@@ -158,7 +180,7 @@ describe('layer boundaries', () => {
   it('lets hooks use the engine only through its barrel', () => {
     const violations: string[] = []
     for (const file of files.filter((f) => f.rel.startsWith('src/hooks/'))) {
-      for (const spec of importsOf(file.raw)) {
+      for (const spec of importsOf(file.prose)) {
         if (/(^|\/)engine(\/|$)/.test(spec) && spec !== '@/engine') violations.push(`${file.rel} -> ${spec}`)
       }
     }
