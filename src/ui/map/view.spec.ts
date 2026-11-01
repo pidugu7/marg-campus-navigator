@@ -192,6 +192,7 @@ describe('gesture input, converted once instead of in two handlers', () => {
     expect(wheelFactor(-10_000, 0)).toBeCloseTo(1.8, 6)
     expect(wheelFactor(Number.NaN, 0)).toBe(1)
     expect(wheelFactor(3, 99)).toBeLessThan(1.01)
+    expect(wheelFactor(1, 2)).toBeCloseTo(wheelFactor(400, 0), 9) // a "page" delta is 400 px of intent
   })
 
   it('turns a pinch into a ratio, and a collapsed pinch into no change', () => {

@@ -17,9 +17,9 @@ Two halves with a one-way door between them.
 | Layer | May import | May never import |
 | --- | --- | --- |
 | `src/engine/` | itself (relative paths), `vitest` in its own specs | React, DOM/`document`, `node:*`, `src/data`, `src/ui` |
-| `src/data/` | `@/engine` | `src/ui` — data does not know a screen exists |
-| `src/hooks/` | `@/engine` **barrel only**, `@/data`, react | deep engine paths (`@/engine/algorithms/…`) |
-| `src/ui/`, `src/App.tsx` | `@/hooks`, `@/data`, react | `@/engine` (go through a hook) |
+| `src/data/` | `@/engine` **barrel only** | `src/ui` — data does not know a screen exists |
+| `src/hooks/` | `@/engine` **barrel only**, `@/data` **barrel only**, react | deep paths into either |
+| `src/ui/`, `src/App.tsx` | `@/hooks`, `@/data` **barrel only**, react | `@/engine` (go through a hook) |
 
 Direction is strictly downward. The engine is a leaf: it has no imports pointing back
 out, which is what makes it testable and reusable without a DOM.
@@ -32,8 +32,14 @@ first, so the scanner chokes on code rather than prose) and fails on:
 1. **engine independence** — an engine file importing anything non-relative; any
    `document` / `window` / `HTMLElement` / `React` / `useState` identifier inside
    `src/engine`; a `.tsx` file there at all; runtime values in `types.ts`.
-2. **boundary direction** — a component importing the engine instead of a hook; a hook
-   reaching past the barrel.
+2. **boundary direction** — a component importing the engine instead of a hook; anyone
+   reaching past a barrel. Both public surfaces are policed the same way (`@/engine` and
+   `@/data`), for any file outside the layer that owns them, with the specifier resolved
+   through the alias *and* relative forms — so `@/data/build-graph` and `../engine/graph`
+   fail as loudly as `@/engine/algorithms`. That widened rule exists because the map's
+   layers needed to name `GraphNode`: the answer was for `src/data` to re-export the type,
+   not for the UI to reach sideways. Direction stays one-way, `ui → data → engine`, and a
+   type is a smaller thing to hand over than a function would be.
 3. **offline guarantee** — `fetch(`, `XMLHttpRequest`, `axios`, `WebSocket`,
    `EventSource`, `sendBeacon` anywhere in shipped code. The dataset must arrive by
    `import`, which is also asserted.
