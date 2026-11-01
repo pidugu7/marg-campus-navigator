@@ -105,6 +105,17 @@ describe('npm run map:validate', () => {
     expect(missing.stdout).toContain('no such file')
   })
 
+  it('survives being skimmed, because `| head` closes the pipe mid-report', () => {
+    // The status code comes from `head` here, so it proves nothing; what matters is that node printed no
+    // crash after the pipe closed. A validator that dumps a stack trace on a skimmed run gets skipped.
+    const skimmed = spawnSync('sh', ['-c', `node ${JSON.stringify(script)} src/data/campus.json | head -1`], {
+      cwd: repo,
+      encoding: 'utf8',
+    })
+    expect(skimmed.stdout).toContain('39 nodes, 56 edges')
+    expect(skimmed.stderr).toBe('')
+  })
+
   it('treats warnings as failures under --strict', () => {
     const strict = run('src/data/campus.json', '--strict')
     expect(strict.status).toBe(1)

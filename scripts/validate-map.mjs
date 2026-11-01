@@ -20,6 +20,14 @@
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 
+// `map:validate | head -5` closes the pipe while this script is still writing. Node reports that
+// asynchronously as an 'error' event on stdout, which would bury a passing report under a stack trace —
+// and a validator that crashes when you skim it is a validator people stop running. Anything that is not
+// a closed pipe is still worth a trace, so it is rethrown.
+process.stdout.on('error', (cause) => {
+  if (cause.code !== 'EPIPE') throw cause
+})
+
 const USAGE = `usage: node scripts/validate-map.mjs [file] [--strict] [--json] [--quiet]
 
   file      defaults to src/data/campus.json
@@ -76,18 +84,14 @@ async function run(target, flags) {
     if (flags.has('--json')) {
       process.stdout.write(`${JSON.stringify({ source: target, ok: !failed, ...report, summary: model.summary }, null, 2)}\n`)
     } else {
-      if (!flags.has('--quiet')) {
-        const summary = model.summary
-        process.stdout.write(
-          `${target}: ${summary.nodeCount} nodes, ${summary.edgeCount} edges, ${summary.placeCount} places, ` +
+      const summary = model.summary
+      const header = flags.has('--quiet')
+        ? ''
+        : `${target}: ${summary.nodeCount} nodes, ${summary.edgeCount} edges, ${summary.placeCount} places, ` +
             `${summary.buildingCount} buildings, ${summary.surfaceCount} surfaces, ${summary.zoneCount} zones\n` +
-            `  ${summary.componentCount} component(s), ${summary.totalMetres} m of walkway, longest segment ${summary.longestEdgeMetres} m\n\n`,
-        )
-      }
-      process.stdout.write(`${mod.formatCampusReport(report, { source: target })}\n`)
-      if (failed && report.errors === 0) {
-        process.stdout.write('\n--strict: warnings are failures here.\n')
-      }
+            `  ${summary.componentCount} component(s), ${summary.totalMetres} m of walkway, longest segment ${summary.longestEdgeMetres} m\n\n`
+      const strictNote = failed && report.errors === 0 ? '\n--strict: warnings are failures here.\n' : ''
+      process.stdout.write(header + `${mod.formatCampusReport(report, { source: target })}\n` + strictNote)
     }
     process.exitCode = failed ? 1 : 0
   } finally {
