@@ -82,7 +82,7 @@ const load = (): SourceFile[] =>
         rel,
         raw,
         code: stripNoise(raw),
-        isTest: /\.test\.tsx?$/.test(rel),
+        isTest: /\.(test|spec)\.tsx?$/.test(rel),
       }
     })
     .sort((a, b) => (a.rel < b.rel ? -1 : 1))
@@ -226,9 +226,15 @@ describe('test coverage contract (live from Phase 1)', () => {
     for (const dir of ENGINE_TESTED_DIRS) {
       for (const file of files.filter((f) => f.rel.startsWith(`${dir}/`) && !f.isTest)) {
         const base = file.rel.slice(dir.length + 1).replace(/\.tsx?$/, '')
-        const collocated = `${dir}/${base}.test.ts`
-        const inTests = `src/engine/__tests__/${base}.test.ts`
-        if (!present.has(collocated) && !present.has(inTests)) missing.push(`${file.rel} (expected ${inTests})`)
+        const candidates = [
+          `${dir}/${base}.spec.ts`,
+          `${dir}/${base}.test.ts`,
+          `src/engine/__tests__/${base}.spec.ts`,
+          `src/engine/__tests__/${base}.test.ts`,
+        ]
+        if (!candidates.some((candidate) => present.has(candidate))) {
+          missing.push(`${file.rel} (expected one of: ${candidates.join(', ')})`)
+        }
       }
     }
     expect(missing, `untested engine modules:\n${missing.join('\n')}`).toEqual([])

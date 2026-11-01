@@ -52,7 +52,9 @@ export default defineConfig(({ mode }) => {
       modulePreload: { polyfill: false },
     },
     test: {
-      include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+      // `.spec.ts` is the convention for engine modules (they sit beside the file they test);
+      // `.test.ts` stays valid so the Phase 0 guards never silently stop running.
+      include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/*.spec.ts', 'src/**/*.spec.tsx'],
       // Engine + architecture specs run in plain node. Component specs opt into
       // jsdom per file with a `@vitest-environment jsdom` docblock (Phase 5).
       environment: 'node',
@@ -62,7 +64,15 @@ export default defineConfig(({ mode }) => {
         provider: 'v8',
         reporter: ['text', 'json-summary', 'html'],
         include: ['src/engine/**'],
-        exclude: ['src/engine/**/*.test.ts', 'src/engine/**/helpers.ts'],
+        exclude: [
+          'src/engine/**/*.test.ts',
+          'src/engine/**/*.spec.ts',
+          'src/engine/**/helpers.ts',
+          // Type-only surfaces: neither file contains a runtime statement, so v8 reports 0/0 and
+          // renders it as 0%, which drags the aggregate down while saying nothing about tests.
+          'src/engine/index.ts',
+          'src/engine/types.ts',
+        ],
       },
     },
   }
