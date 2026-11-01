@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join, posix, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
@@ -7,6 +7,7 @@ import {
   ENGINE_BANNED_IMPORT_PREFIXES,
   ENGINE_CONSUMERS_ALLOWED,
   ENGINE_TESTED_DIRS,
+  PUBLIC_BARRELS,
   NETWORK_APIS,
   PLATFORM_GLOBALS_IN_ENGINE,
   RUNTIME_DEP_ALLOW_PATTERNS,
@@ -177,11 +178,22 @@ describe('layer boundaries', () => {
     expect(violations, `components must go through a hook, not the engine:\n${violations.join('\n')}`).toEqual([])
   })
 
-  it('lets hooks use the engine only through its barrel', () => {
+  it('reaches a public surface only through its barrel', () => {
+    // A deep import is not merely untidy: `@/data/build-graph` and `@/engine/graph` skip the surface whose
+    // shape the next phase is allowed to change, and they are invisible to a reader who only sees the barrel.
+    // So every consumer resolves its specifier and gets checked, alias form and relative form alike.
     const violations: string[] = []
-    for (const file of files.filter((f) => f.rel.startsWith('src/hooks/'))) {
+    for (const file of files) {
       for (const spec of importsOf(file.prose)) {
-        if (/(^|\/)engine(\/|$)/.test(spec) && spec !== '@/engine') violations.push(`${file.rel} -> ${spec}`)
+        const resolved = spec.startsWith('@/')
+          ? `src/${spec.slice(2)}`
+          : posix.normalize(posix.join(posix.dirname(file.rel), spec))
+        for (const { home } of PUBLIC_BARRELS) {
+          if (file.rel.startsWith(home)) continue
+          if (resolved.startsWith(home) && resolved !== `${home}index.ts`) {
+            violations.push(`${file.rel} -> ${spec}`)
+          }
+        }
       }
     }
     expect(violations, `deep imports bypass the public surface:\n${violations.join('\n')}`).toEqual([])

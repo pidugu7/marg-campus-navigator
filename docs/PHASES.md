@@ -302,3 +302,36 @@ npm test            → 10 files, 185 tests passed
 npm run map:validate  → 0 errors, 2 warnings, exit 0 (the two intentional place-to-place edges)
 npm run build       → ok (App.tsx still untouched: no UI in this checkpoint)
 ```
+
+**Checkpoint 3 — the plate, the camera, and the four layers · 2026-11-01**
+
+`src/ui/map/` draws the campus as one `<svg>` and nothing else: base (grid + ground surfaces), buildings,
+walkways, nodes. Panning and zooming change **one attribute** — the `viewBox` — so the layers, which are
+`memo`'d over data that never changes, re-render zero times per frame. The camera itself is arithmetic in
+`view.ts`: `{ cx, cy, span }`, where `span` is the visible width in world units and the visible height is
+`span / aspect`. That is why a window resize cannot change your zoom level, and why the whole thing is
+testable in plain Node (21 specs, no DOM): *the point under the cursor stays under the cursor*, the view
+never leaves the canvas, a clamped zoom must not drift the centre, `fit` covers the canvas at every aspect
+from 0.4 to 3.2 — which is the 360 px overflow question, answered once.
+
+Gestures are two files, not one: `touch-action: none` in `map.css` and `use-viewport.ts`. Either alone is
+broken — React registers `wheel` passively at the root, so `preventDefault()` from a JSX handler does
+nothing and the page scrolls while the map zooms; hence a hand-bound non-passive listener on the element,
+reading the camera's inputs from a ref so it binds once. Keyboard comes free with it: arrows pan, `+`/`-`
+zoom, `0` resets, and only the keys actually used are consumed, so Tab still tabs.
+
+**Two boundary findings.** `src/ui/map/layers/*` needed `GraphNode`/`GraphEdge`, and importing them from
+`@/engine/types` is precisely what the architecture test forbids — so `src/data/index.ts` re-exports the
+types the map must name, keeping the dependency direction one-way (`ui → data → engine`) and the engine
+barrel the only definition site. And the barrel rule itself was widened from "hooks may not deep-import the
+engine" to "nobody outside a layer may deep-import it, engine or data", resolved through both the `@/`
+alias and relative specifiers; a probe file proved it fails on `@/data/build-graph` as well as
+`@/engine/graph` before it was deleted.
+
+At 360 px the plate is `5/4`, not arbitrarily tall: the camera is clamped to the canvas, so a taller plate
+shows only empty margin above and below a smaller campus. Junction dots are hidden at that width (they read
+as dust and invite a mis-tap), and walkway casings lose a pixel.
+
+```
+npm run check → typecheck · lint · 207 tests (11 files) · build ok
+```

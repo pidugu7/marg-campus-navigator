@@ -1,0 +1,233 @@
+/* The map plate: a fixed-aspect frame, an SVG that owns every gesture, and overlays that live outside the
+   SVG so they stay the same size while the camera moves. */
+
+.map-frame {
+  position: relative;
+  border-radius: var(--radius-l);
+  background: var(--map-bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--map-bg);
+  touch-action: none; /* the browser must not pan or pinch-zoom the page under a finger */
+  cursor: grab;
+}
+
+.map--dragging {
+  cursor: grabbing;
+}
+
+.map:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* --- layers --------------------------------------------------------------- */
+
+.map-paper {
+  fill: var(--map-bg);
+}
+
+.surface {
+  stroke: none;
+  opacity: 0.75;
+}
+
+.surface--lawn {
+  fill: #dfeecd;
+}
+.surface--water {
+  fill: #cfe3f2;
+}
+.surface--plaza {
+  fill: #e9e5f5;
+}
+.surface--parking {
+  fill: #e2e6ee;
+}
+.surface--construction {
+  fill: #f2e2cf;
+}
+
+@media (prefers-color-scheme: dark) {
+  .surface--lawn {
+    fill: #1c2a20;
+  }
+  .surface--water {
+    fill: #16283a;
+  }
+  .surface--plaza {
+    fill: #262238;
+  }
+  .surface--parking {
+    fill: #222632;
+  }
+  .surface--construction {
+    fill: #30261c;
+  }
+}
+
+.layer-walkways line {
+  stroke-linecap: round;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.walk-case {
+  stroke: var(--walk-case);
+  stroke-width: 6;
+}
+
+.walk-fill {
+  stroke: var(--walk-fill);
+  stroke-width: 3.4;
+}
+
+.walk--grass.walk-fill {
+  stroke: #a8c98f;
+}
+.walk--gravel.walk-fill {
+  stroke: #cfc6b4;
+}
+.walk--stairs.walk-fill {
+  stroke-dasharray: 2 4;
+  stroke-width: 3.4;
+}
+.walk--oneway.walk-fill {
+  stroke-dasharray: 6 2;
+}
+.walk--shaded.walk-case {
+  stroke: var(--walk-case-dark);
+}
+
+.building {
+  fill-opacity: var(--building-fill-opacity);
+  stroke-opacity: var(--building-stroke-opacity);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.node {
+  stroke: var(--map-halo);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.node--junction {
+  fill: var(--ink-faint);
+  opacity: 0.55;
+}
+
+.node--entrance {
+  fill: var(--map-halo);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* A place's dot is filled with its zone colour from the data file, so only the outline is styled here. */
+.node--place,
+.node--gate {
+  stroke: var(--map-halo);
+  stroke-width: 2;
+}
+
+/* --- overlays ------------------------------------------------------------- */
+
+.map-controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.map-btn {
+  display: grid;
+  place-items: center;
+  width: 32px; /* 8 × 4px: the control is a 4px-grid multiple in both axes */
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  box-shadow: var(--shadow-raised);
+}
+
+.map-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.map-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.map-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.map-hud {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ink-soft);
+  font: 500 11px/1.4 var(--font-mono);
+  pointer-events: none; /* the readout must never eat a drag that starts on top of it */
+}
+
+.map-hud b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.map-hud .map-hint {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+@media (max-width: 640px) {
+  .map-hud .map-hint {
+    display: none; /* on a phone the hint is what the fingers are for */
+  }
+
+  /* The plate follows the campus's shape. A tall phone plate cannot show *more* campus — the camera is
+     clamped to the canvas, so the extra height would only be empty margin above and below a shrunken map.
+     5/4 is the closest practical ratio to the data's 1600 × 1000, which is how the whole campus stays
+     readable at 360 px wide without anyone having to know that dragging exists. */
+  .map {
+    aspect-ratio: 5 / 4;
+  }
+
+  .walk-case {
+    stroke-width: 5;
+  }
+  .node--junction {
+    /* Junction dots at their desktop size read as dust on a 360 px plate, and dust invites a mis-tap. */
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-btn {
+    transition: none;
+  }
+}

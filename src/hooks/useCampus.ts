@@ -1,6 +1,15 @@
 import { useMemo } from 'react'
-import { campus, campusMeta } from '@/data'
-import type { CanvasSpec, CampusMetadata, DataStatus } from '@/data'
+import { buildGraph, campus, campusMeta } from '@/data'
+import type {
+  BuildingSpec,
+  CampusModel,
+  CanvasSpec,
+  CampusMetadata,
+  DataStatus,
+  NodeSpec,
+  SurfaceSpec,
+  ZoneSpec,
+} from '@/data'
 
 export interface CampusSummary {
   readonly meta: CampusMetadata
@@ -18,15 +27,32 @@ export interface CampusSummary {
   readonly gridStep: number
   readonly nodeCount: number
   readonly edgeCount: number
+  /**
+   * The validated model: the graph the engine can route on, plus the report that says how much of the file
+   * survived. Built once per module load and shared, because `buildGraph` is pure over a static import and
+   * the map re-renders often.
+   */
+  readonly model: CampusModel
+  /** Draw-only blocks from the file, handed over as they are: the map needs a footprint, not an edge. */
+  readonly nodes: readonly NodeSpec[]
+  readonly buildings: readonly BuildingSpec[]
+  readonly surfaces: readonly SurfaceSpec[]
+  readonly zones: readonly ZoneSpec[]
 }
 
 /**
- * Read-only view of the campus dataset.
+ * The campus dataset, and the only door the UI has to it.
  *
- * The dataset is a static import, so there is nothing async here and no loading
- * state to manage — a deliberate consequence of "no backend". Phase 2 adds the
- * memoised `buildGraph(campus)` call to this hook, which is why map code will
- * ask this hook for the graph instead of importing it.
+ * Three things live here that are not merely convenient:
+ *
+ * - `buildGraph(campus)` is memoised on an empty dependency list. The data is a static import, so it is
+ *   fixed for the life of the module, and running the validator per render would be pure waste — this is
+ *   the one call where "no backend" turns into a saving rather than a limitation.
+ * - The report travels with the graph. A map that hides the fact that three edges were dropped is a map
+ *   that will be debugged by eye; the counts and the issue list are exposed so the shell can say it out loud.
+ * - Components receive the *file's* rows for the draw-only blocks (`buildings`, `surfaces`, `zones`) and
+ *   the model's rows for geometry that the graph agrees to (`model.nodes`, `model.edges`). Which is to say:
+ *   draw what was validated, style what was only drawn.
  */
 export function useCampus(): CampusSummary {
   return useMemo(() => {
@@ -44,6 +70,12 @@ export function useCampus(): CampusSummary {
       gridStep: Math.max(5, 10 / Math.max(campus.canvas.pixelsPerMetre, 0.001)),
       nodeCount: campus.nodes.length,
       edgeCount: campus.edges.length,
+      model: buildGraph(campus),
+      nodes: campus.nodes,
+      buildings: campus.buildings,
+      surfaces: campus.surfaces,
+      zones: campus.zones,
     }
   }, [])
+  // No deps on purpose: `campus` is a module-level import, so this memo is computed exactly once per load.
 }

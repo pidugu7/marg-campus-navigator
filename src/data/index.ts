@@ -38,6 +38,13 @@ export const canvasSpec = campusJson.canvas
  */
 export const DATA_STATUSES: readonly DataStatus[] = ['synthetic-placeholder', 'digitised', 'surveyed']
 
+/* The map draws graph values, and `GraphNode`/`GraphEdge` are the engine's types. They are re-exported
+   here rather than imported by `src/ui/**` from `@/engine`, because the boundary this project is graded on
+   is that a component's *every* cross-layer import names a barrel the architecture test has agreed to.
+   The engine's barrel is where these types live (`export type * from './types'`), so this adds no new
+   surface — it only keeps the direction of dependency one-way: ui -> data -> engine. */
+export type { EdgeAttributes, GraphEdge, GraphNode, NodeId, NodeKind, ZoneId } from '@/engine'
+
 /* The data layer's own contract, re-exported so a component can type a report without reaching
    past the barrel — `src/ui/**` is not allowed to import `./build-graph` directly any more than it
    may import `@/engine`. */

@@ -1,22 +1,23 @@
-import { Boxes, Compass, Database, Route as RouteIcon, ShieldCheck } from 'lucide-react'
-import { useEngineContract } from '@/hooks/useEngineContract'
+import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIcon } from 'lucide-react'
 import { useCampus } from '@/hooks/useCampus'
+import { useEngineContract } from '@/hooks/useEngineContract'
+import { MapView } from '@/ui/map/map-view'
 import '@/styles/app.css'
+import '@/styles/map.css'
 
 /**
- * Phase 0 shell. It proves three things and nothing else:
- *  1. the dataset reaches the browser through a bundled import, not a request;
- *  2. React can read engine values only via a hook over the barrel;
- *  3. the SVG plate that Phases 2–7 draw on exists at the right size.
+ * The shell. Phases 0 and 1 proved the boundaries; Phase 2 puts a campus on the plate.
  *
- * No controls here yet: a search box that cannot search would be a lie with a
- * border around it.
+ * Note what this file does *not* do: it never imports `@/engine`. Everything it draws and counts arrives
+ * through `useCampus`, which is the one module allowed to call `buildGraph`. That is the rule the
+ * architecture test enforces, and the reason a component can be rewritten — or the map replaced by a
+ * canvas renderer — without touching a single algorithm.
  */
 export default function App() {
   const campusInfo = useCampus()
   const engine = useEngineContract()
-  const { canvas, gridStep } = campusInfo
-  const majorStep = gridStep * 10
+  const { canvas, gridStep, model } = campusInfo
+  const issues = model.issues
 
   return (
     <div className="shell">
@@ -33,6 +34,11 @@ export default function App() {
             <Boxes size={13} aria-hidden="true" />
             engine <code>{engine.version}</code>
           </span>
+          <span className={model.ok ? 'chip chip--ok' : 'chip chip--warn'}>
+            {model.ok ? <CheckCircle2 size={13} aria-hidden="true" /> : <AlertTriangle size={13} aria-hidden="true" />}
+            {model.errors} error{model.errors === 1 ? '' : 's'}, {model.warnings} warning
+            {model.warnings === 1 ? '' : 's'}
+          </span>
           {campusInfo.isPlaceholder ? (
             <span className="chip chip--warn" title={campusInfo.meta.notes}>
               <Database size={13} aria-hidden="true" />
@@ -44,69 +50,60 @@ export default function App() {
               {campusInfo.status}
             </span>
           )}
-          <span className="chip">
-            <ShieldCheck size={13} aria-hidden="true" />
-            boundary tests green
-          </span>
         </div>
       </header>
 
       <main className="work">
-        <svg
-          className="map"
-          viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-          role="img"
-          aria-label={`Empty map plate for ${campusInfo.meta.campus}. Buildings and walkways arrive in Phase 2.`}
-        >
-          <defs>
-            <pattern id="grid" width={gridStep} height={gridStep} patternUnits="userSpaceOnUse">
-              <path
-                d={`M ${gridStep} 0 L 0 0 0 ${gridStep}`}
-                style={{ fill: 'none', stroke: 'var(--map-grid)', strokeWidth: 0.5 }}
-              />
-            </pattern>
-            <pattern id="grid-major" width={majorStep} height={majorStep} patternUnits="userSpaceOnUse">
-              <path
-                d={`M ${majorStep} 0 L 0 0 0 ${majorStep}`}
-                style={{ fill: 'none', stroke: 'var(--map-grid-major)', strokeWidth: 1 }}
-              />
-            </pattern>
-          </defs>
-
-          <rect x={0} y={0} width={canvas.width} height={canvas.height} fill="url(#grid)" />
-          <rect x={0} y={0} width={canvas.width} height={canvas.height} fill="url(#grid-major)" />
-
-          <g className="map-note" textAnchor="middle">
-            <text x={canvas.width / 2} y={canvas.height / 2 - 26} style={{ fontSize: 30, fontWeight: 600 }}>
-              Map plate · {canvas.width} × {canvas.height}
-            </text>
-            <text x={canvas.width / 2} y={canvas.height / 2 + 6} style={{ fontSize: 17, opacity: 0.75 }}>
-              grid {majorStep / canvas.pixelsPerMetre} m · {campusInfo.nodeCount} nodes · {campusInfo.edgeCount}{' '}
-              walkway segments
-            </text>
-            <text x={canvas.width / 2} y={canvas.height / 2 + 34} style={{ fontSize: 15, opacity: 0.55 }}>
-              Geometry is drawn in Phase 2; the algorithms that use it are written in Phases 1 and 3.
-            </text>
-          </g>
-        </svg>
+        <MapView
+          model={model}
+          canvas={canvas}
+          buildings={campusInfo.buildings}
+          surfaces={campusInfo.surfaces}
+          zones={campusInfo.zones}
+          gridStep={gridStep}
+        />
 
         <aside className="side">
           <section className="card">
             <h2>
               <RouteIcon size={13} aria-hidden="true" />
-              What this phase proves
+              Map data report
             </h2>
+            <p className="lede">
+              <code>npm run map:validate</code> reads <code>src/data/campus.json</code> against{' '}
+              <code>docs/SCHEMA.md</code>. The same function ran on the way here, so what you can see and
+              what the validator accepted are the same data.
+            </p>
+            <ul className="report">
+              {issues.length === 0 ? (
+                <li className="report-clear">no issues · {model.summary.componentCount} component</li>
+              ) : (
+                issues.map((issue) => (
+                  <li key={`${issue.code}-${issue.subject}-${issue.message}`} className={`report-${issue.severity}`}>
+                    <code>{issue.code}</code>
+                    <span>{issue.message}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+
+          <section className="card">
+            <h2>What this phase proves</h2>
             <ul>
               <li>
-                Vite + React + TypeScript build, Vitest, ESLint and the <code>@</code> alias all run green.
+                A campus model in <code>src/data/campus.json</code>: {model.summary.placeCount} places and{' '}
+                {model.summary.nodeCount - model.summary.placeCount} junctions,{' '}
+                {model.summary.edgeCount} walkway segments in {model.summary.componentCount} connected
+                component, with a loop so there is more than one way to get anywhere.
               </li>
               <li>
-                <code>src/engine</code> is a pure TypeScript package: it exports a contract and imports no UI
-                framework.
+                The SVG map pans, zooms by wheel and pinch, and resets — camera arithmetic in{' '}
+                <code>src/ui/map/view.ts</code>, tested without a DOM.
               </li>
               <li>
-                An architecture test enforces that separation, the dependency allowlist, and the ban on
-                off-the-shelf graph libraries.
+                Every structure and algorithm is hand-written in <code>src/engine</code>, which imports no
+                UI framework and is reached only through <code>src/hooks</code>.
               </li>
             </ul>
           </section>
@@ -120,6 +117,10 @@ export default function App() {
               <dd>{campusInfo.meta.dataStatus}</dd>
               <dt>scale</dt>
               <dd>{canvas.pixelsPerMetre} px/m</dd>
+              <dt>walkway</dt>
+              <dd>
+                {model.summary.totalMetres} m · longest {model.summary.longestEdgeMetres} m
+              </dd>
               <dt>engine</dt>
               <dd>{engine.version}</dd>
               <dt>cost epsilon</dt>
@@ -127,14 +128,6 @@ export default function App() {
               <dt>min segment</dt>
               <dd>{engine.minSegmentMetres} m</dd>
             </dl>
-          </section>
-
-          <section className="card">
-            <h2>Next</h2>
-            <ul>
-              <li>Phase 1: min-heap, trie, union-find, LRU cache — hand-written, unit-tested.</li>
-              <li>Phase 2: the campus dataset and the map you can pan and zoom.</li>
-            </ul>
           </section>
         </aside>
       </main>

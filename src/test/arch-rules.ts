@@ -134,6 +134,18 @@ export const ENGINE_BANNED_IMPORT_PREFIXES: readonly string[] = [
 ]
 
 /** Where an engine-touching import is legal. Hooks are the only app-side door. */
+/**
+ * Public surfaces and the directory that owns each one. A file outside the owning directory may import
+ * the barrel and nothing else, which is the same rule applied to both layers that the coursework is about
+ * (the engine) and to the adapter in front of it (the data layer). Enforcing it for `src/data` as well is
+ * what stops `src/ui` typing `import { buildGraph } from '@/data/build-graph'` and quietly skipping the
+ * barrel that exists so Phase 7's editor can swap the implementation.
+ */
+export const PUBLIC_BARRELS: readonly { readonly barrel: string; readonly home: string }[] = [
+  { barrel: '@/engine', home: 'src/engine/' },
+  { barrel: '@/data', home: 'src/data/' },
+]
+
 export const ENGINE_CONSUMERS_ALLOWED: readonly string[] = [
   'src/engine/', // internal
   'src/hooks/', // the bridge

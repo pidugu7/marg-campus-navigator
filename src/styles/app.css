@@ -118,21 +118,6 @@ body {
   }
 }
 
-.map {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 10;
-  background: var(--map-bg);
-  border-radius: var(--radius-l);
-  border: 1px solid var(--line);
-}
-
-.map-note {
-  fill: var(--map-ink);
-  font-family: var(--font-ui);
-}
-
 .side {
   display: grid;
   gap: var(--gap);
