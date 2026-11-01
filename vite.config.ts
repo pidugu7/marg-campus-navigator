@@ -65,7 +65,15 @@ export default defineConfig(({ mode }) => {
         reporter: ['text', 'json-summary', 'html'],
         // The data layer's validator is in scope from Phase 2: it is decision logic with 66 specs
         // behind it, and leaving it out would make the report describe only half the tested code.
-        include: ['src/engine/**', 'src/data/**'],
+        include: [
+          'src/engine/**',
+          'src/data/**',
+          // The map's camera is arithmetic with 21 specs and no React in it, so it belongs in the same
+          // report as the rest of the decision logic. The *components* stay out: there is no DOM here to
+          // measure them with, and a coverage figure that quietly omits the untestable half is the number
+          // that lies.
+          'src/ui/map/view.ts',
+        ],
         exclude: [
           'src/engine/**/*.test.ts',
           'src/engine/**/*.spec.ts',
