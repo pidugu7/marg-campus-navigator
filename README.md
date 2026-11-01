@@ -11,9 +11,10 @@ algorithm that makes it work is written by hand in this repo.
   any static host — and there is no network call to fail during a demo.
 - **Algorithm libraries:** none. `package.json` is checked by a test, not by trust.
 
-> **Current phase: 0 — scaffold.** The build, test and dependency rules are live; the
-> map data is an explicitly-labelled placeholder and no routing exists yet. See
-> [docs/PHASES.md](docs/PHASES.md) for what is real versus planned.
+> **Current phase: 1 — data structures.** The heap, trie, union-find, LRU cache and adjacency
+> graph are written and tested (95 tests). There is still no routing, and the map data is an
+> explicitly-labelled placeholder. See [docs/PHASES.md](docs/PHASES.md) for what is real versus
+> planned.
 
 ## Quick start
 
@@ -72,7 +73,13 @@ docs/           architecture, algorithms, map-data format, phase log
 
 ## Status
 
-Phase 0 delivered the toolchain, the engine contract (`src/engine/types.ts`), the
-placeholder dataset and the architecture guards. Phases 1–8 — structures, map, algorithms,
-router, search, analysis, the map editor, polish + Pages deploy — are tracked in
-[docs/PHASES.md](docs/PHASES.md).
+Phase 0 delivered the toolchain, the engine contract (`src/engine/types.ts`), the placeholder
+dataset and the architecture guards. Phase 1 delivered the five hand-written structures in
+`src/engine/structures/`, each with a spec that checks it against a naive reference model under a
+fixed seed. Phases 2–8 — map, algorithms, router, search, analysis, the map editor, polish + Pages
+deploy — are tracked in [docs/PHASES.md](docs/PHASES.md).
+
+```ts
+// The engine is usable as a package, and nothing in it knows React exists.
+import { AdjacencyGraph, MinHeap, byPriority, createGraph } from '@/engine'
+```

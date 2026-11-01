@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AdjacencyGraph,
   COST_EPSILON,
   DEFAULT_EDGE_ATTRIBUTES,
   ENGINE_VERSION,
+  LRUCache,
+  MinHeap,
+  Trie,
+  UnionFind,
+  byPriority,
+  createGraph,
   MIN_SEGMENT_METRES,
+  normaliseWord,
+  validateGraph,
   WALKING_SPEED_MPS,
 } from '../index'
 import type { Graph, GraphEdge, GraphIndex, GraphNode, RouteResult } from '../index'
@@ -72,6 +81,66 @@ describe('engine public surface', () => {
       exploredOrder: ['gate-1', 'jquad', 'lib'],
     }
     expect(result.ok && result.hops).toBe(2)
+  })
+
+  it('publishes every Phase 1 structure through the barrel, so no deep import is ever needed', () => {
+    const surface = {
+      AdjacencyGraph,
+      LRUCache,
+      MinHeap,
+      Trie,
+      UnionFind,
+      byPriority,
+      createGraph,
+      normaliseWord,
+      validateGraph,
+    }
+    for (const [name, value] of Object.entries(surface)) {
+      expect(typeof value, `${name} should be exported from "@/engine"`).toBe('function')
+    }
+  })
+
+  it('answers a real query through the public surface alone', () => {
+    const graph = createGraph(
+      [
+        { id: 'gate', x: 0, y: 0, label: 'Main Gate', kind: 'gate' },
+        { id: 'quad', x: 40, y: 0 },
+        { id: 'lib', x: 40, y: 55, label: 'Central Library', kind: 'place' },
+      ],
+      [
+        { id: 'gq', from: 'gate', to: 'quad', metres: 40 },
+        { id: 'ql', from: 'quad', to: 'lib', metres: 55 },
+      ],
+    )
+    expect(graph.validate()).toEqual([])
+    expect(graph.componentOf('lib')).toBe(graph.componentOf('gate'))
+    expect(graph.neighboursOf('quad').map((entry) => entry.to).sort()).toEqual(['gate', 'lib'])
+
+    // The five structures compose through the barrel with nothing else imported. This is the
+    // proof that `@/engine` is a complete API: if a hook ever needs a deep path, one of these
+    // calls could not be written.
+    const heap = new MinHeap(byPriority<{ id: string; priority: number }>(), [
+      { id: 'far', priority: 95 },
+      { id: 'near', priority: 40 },
+    ])
+    expect(heap.pop()?.id).toBe('near')
+
+    const index = new Trie<string>()
+    index.insert('Central Library', 'lib')
+    index.addAlias('CL', 'lib')
+    expect(index.complete('ce').map((match) => match.matchedKey)).toEqual(['central library'])
+    expect(normaliseWord('  CENTRAL   library ')).toBe('central library')
+
+    const cache = new LRUCache<string, number>(1)
+    cache.put('gate|lib', 95)
+    cache.put('gate|quad', 40)
+    expect(cache.get('gate|lib')).toBeUndefined()
+    expect(cache.capacity).toBe(1)
+
+    const sets = new UnionFind(['a', 'b', 'c'])
+    sets.union('a', 'b')
+    expect([sets.componentCount, sets.connected('a', 'c')]).toEqual([2, false])
+    expect(validateGraph(graph.toGraph())).toEqual([])
   })
 
   it('keeps GraphIndex an interface (implementable by a plain object literal)', () => {

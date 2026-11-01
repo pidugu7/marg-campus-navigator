@@ -18,8 +18,8 @@ wait. Nothing below is "already done" unless it has a log entry with verificatio
 
 | Phase | Scope | Exit criteria |
 | --- | --- | --- |
-| **0** | scaffold, engine contract, architecture guards, placeholder dataset | `npm run check` green; deps proven allowed; guard proven to fail on planted violations |
-| **1** | min-heap, trie, union-find, LRU cache, adjacency index | unit tests per structure incl. invariants and property tests; no UI at all |
+| **0** ✅ | scaffold, engine contract, architecture guards, placeholder dataset | `npm run check` green; deps proven allowed; guard proven to fail on planted violations |
+| **1** ✅ | min-heap, trie, union-find, LRU cache, adjacency index | unit tests per structure incl. invariants and property tests; no UI at all |
 | **2** | real `campus.json` (synthetic Amrita layout), `build-graph.ts`, `map:validate`, SVG map with pan/zoom, zones/buildings/walkways/labels | map renders and pans; validator exits 0; graph round-trips through the engine index |
 | **3** | BFS, DFS, Dijkstra, A\*, path post-processing, turn-by-turn | A\* ≡ Dijkstra ≡ brute-force oracle on every fixture pair; A\* expands ≤ Dijkstra; DFS cut-vertices verified by deletion |
 | **4** | `router.ts`, cost profiles, LRU wiring, `scripts/bench.mjs` | profile switch changes the chosen route for a defensible reason; cache hit rate visible in the UI; benchmark table (with machine info) generated into `docs/ALGORITHMS.md` |
@@ -109,3 +109,97 @@ pairing rule also fired, which is the Phase 1 rule already working.
   `@vitest-environment jsdom` docblock on those files.
 - `docs/ALGORITHMS.md` lists intended invariants per structure. They are a plan, not
   evidence, until Phase 1's tests exist.
+
+### Phase 1 — data structures + the graph · 2026-11-01
+
+**Scope discipline:** engine only. The diff touches `src/engine/**`, `src/test/architecture.test.ts`,
+`vite.config.ts` (spec extension + coverage), and the docs. No component, hook, style or dataset file
+changed, so nothing in the UI could come to depend on an algorithm that does not exist yet.
+
+**Added** — `src/engine/structures/`, each with a collocated spec:
+
+| module | what it is | tests |
+| --- | --- | --- |
+| `min-heap.ts` | comparator-driven binary heap, O(n) Floyd build, `isHeapOrdered()` audit, lazy deletion argued against an indexed heap | 14 |
+| `trie.ts` | normalised prefix index; records and keys kept separate; aliases; ranked `complete()`; branch pruning on delete | 16 |
+| `union-find.ts` | path compression + union by rank, `depthOf`/`maxDepth` probes, `buildComponents(graph, { blockedEdges, skip })` | 15 |
+| `lru-cache.ts` | `Map` + hand-written doubly linked list, recency split between read and probe, `consistency()` | 14 |
+| `graph.ts` | adjacency list with a seal lifecycle, frozen shared snapshot, `validateGraph` over any graph | 18 |
+| `__tests__/helpers.ts` | seeded generators (mulberry32 + FNV) and the naive oracles every property test leans on | — |
+
+Total **95 tests**, engine coverage **97.84% statements / 98.9% lines**.
+
+**Conventions and contract changes made in this phase**
+
+- Specs are `*.spec.ts` beside their module. Vitest's `include`, the coverage excludes and the
+  architecture test's pairing rule accept `.spec.ts` as well as `.test.ts`; `contract.test.ts` was
+  renamed to `contract.spec.ts` so one convention covers the engine.
+- `GraphIssueCode` gained `non-positive-cost`, added alongside `graph.ts` rather than with the docs
+  checkpoint, because a validator cannot report a code the contract does not have.
+- `UnionFind<TElement extends string>`: the id tie-break needs an ordering, and lexicographic
+  comparison of numeric ids would be an accident rather than a decision.
+- `ENGINE_VERSION` → `0.2.0-phase1.structures`. The barrel publishes all five structures, and
+  `contract.spec.ts` proves a real query is writable through `@/engine` alone — that test is what
+  makes "the UI never needs a deep import" a checked claim instead of an intention.
+- Coverage excludes `index.ts` and `types.ts`. Both are statement-free (a re-export barrel and a
+  file of types), so v8 reported `0/0` as 0% and dragged the aggregate down while saying nothing
+  about tests.
+
+**Verification**
+
+```
+npm run typecheck   → tsc -b, 3 projects, 0 errors
+npm run lint        → eslint ., 0 problems
+npm test            → 7 files, 95 tests passed
+npm run build       → ok (App.tsx untouched)
+```
+
+`erasableSyntaxOnly` and `noUncheckedIndexedAccess` both paid for themselves again: the first
+rejected a parameter property in a test-only model class, the second forced honest `undefined`
+handling in `heap.peek`, `#at`, and every adjacency lookup.
+
+**How this phase was actually executed, and the deviation it forced.** The first attempt was
+written, verified at 93 tests and left uncommitted while the session branch was locked by its
+merged PR; `Continue` re-cloned the repository and the work was destroyed with no trace in the
+remote, the index or the object store. The rebuild therefore ran as **six checkpoints, each committed
+and pushed before the next began** — a phase that cannot be lost is worth more than a phase that is
+slightly prettier. Two checkpoint boundaries moved as a result: `helpers.ts` arrived with the heap
+(its property tests were the first consumers, and two copies of "what a component is" is how an
+engine bug gets ratified by a test), and the guard's prose fix arrived with union-find, after
+comment text had produced a false alarm in three consecutive checkpoints.
+
+**Four things the rebuild produced that the first pass had not**
+
+1. **Two trie bugs in the alias bookkeeping**, both found by the removal/pruning tests: `addAlias`
+   registered a key in the trie without telling the record, so an alias could never be removed;
+   and `removeKey` deleted the last spelling before delegating, leaving the key in the index and
+   the record gone — `complete()` returned a ghost. The engine is now correct *because* the tests
+   were adversarial rather than illustrative.
+2. **A graph-index bug that would have shipped**: incidence was recorded only on an edge's `from`
+   side, so `edgesAt`/`degree` claimed nothing touched the far end of a one-way walkway.
+3. **Three false alarms from the architecture guard, all caused by my prose**: a doc comment
+   reading `from "not added yet"`, a template literal reading `from "@/engine"`, and a sentence
+   wrapping across `"no route exists" from "no route was found"`. Specifier extraction is now
+   anchored to real `import`/`export` statement syntax, the residual limitation (a comment spelling
+   out `import("x")` still registers) is written in the file, and `the guard itself` test asserts
+   both halves — prose ignored, and single-line, side-effect, multi-line and re-export imports all
+   found. Re-proven with planted violations: `graphology`, `ngraph.graph` and `lucide-react`
+   imports, `document` in an engine file, a component importing `@/engine`, `fetch(` in the data
+   layer, a `graphology` devDependency — every one named its file.
+4. **Four expectations of mine that were wrong while the engine was right**, each settled by
+   documentation rather than by adjusting a number: pops are not globally monotone when pushes
+   interleave; a heap is not a stable sort; a key lives on the node that spells the whole word, not
+   on every node beneath it; and one lone node is valid *and* reportable as stranded.
+
+**Gaps I am not hiding**
+
+- These structures have no consumer yet: Phase 3's searches are the first. That is why every spec
+  leans on an independent reference model instead of a happy-path example.
+- No heap decrease-key, by design (see `ALGORITHMS.md` §1). If Phase 4's benchmark shows the
+  duplication factor hurting, revisiting it is a legitimate Phase 8 task, and the decision is
+  recorded so it can be revisited rather than relitigated.
+- `LRUCache` has no `resize`; `UnionFind` has no `delete`. Neither has a use case, and an unused
+  API is a liability in review, not a feature.
+- A short list of reachable-but-uncovered branches (the `from`-side arm of the unknown-endpoint
+  checks, `removeEdge` on a one-way edge, `lookup` on an unregistered word, `members` out of
+  range) is itemised in the PR description instead of being quietly deleted from it.

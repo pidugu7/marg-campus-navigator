@@ -304,6 +304,21 @@ describe('Trie', () => {
     }
   })
 
+  it('clear() empties every structure it owns', () => {
+    const trie = new Trie<string>().insert('Annex', 'a').addAlias('AX', 'a').insert('Depot', 'd')
+    expect([trie.size, trie.keyCount]).toEqual([2, 3])
+    trie.clear()
+    expect([trie.size, trie.keyCount]).toEqual([0, 0])
+    expect(trie.complete('', 99)).toEqual([])
+    expect(trie.records()).toEqual([])
+    expect(trie.nodeAt('a')).toBeUndefined()
+    expect(trie.startsWith('a')).toBe(false)
+    // Reusable afterwards: the serial counter keeps rising, so ties stay insertion-ordered across
+    // a clear rather than resetting to a value that collides with the previous batch.
+    trie.insert('Bay', 'b')
+    expect(trie.complete('ba').map((match) => match.payload)).toEqual(['b'])
+  })
+
   it('prefix search matches a brute-force filter over 30 random trials', () => {
     const rng = createRandom(BASE_SEED ^ 0x51ed)
     for (let trial = 0; trial < 30; trial++) {

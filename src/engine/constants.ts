@@ -10,7 +10,7 @@ import type { EdgeAttributes } from './types'
  * `src/engine/index.ts` changes shape, so a failing boundary check points at
  * the contract rather than at UI churn.
  */
-export const ENGINE_VERSION = '0.1.0-phase0.contract' as const
+export const ENGINE_VERSION = '0.2.0-phase1.structures' as const
 
 /** Below this, two waypoints are the same place for path-simplification purposes. */
 export const MIN_SEGMENT_METRES = 0.5

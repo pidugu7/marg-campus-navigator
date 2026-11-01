@@ -13,8 +13,9 @@
  *                 profile, caches results. The only part with policy.
  *   geo/          pure geometry used for weights, heuristics and snapping.
  *
- * Phase 0 ships the contract only: `types.ts` and `constants.ts`. The
- * structures arrive in Phase 1, the algorithms in Phase 3.
+ * Phase 1 ships the five data structures in `structures/`. `algorithms/` (Phase 3) and
+ * `routing/` (Phase 4) will consume them through *this* file: a hook may import `@/engine`
+ * and nothing else, which is what keeps a UI refactor from discovering deep import paths.
  */
 
 export type * from './types'
@@ -25,3 +26,41 @@ export {
   MIN_SEGMENT_METRES,
   WALKING_SPEED_MPS,
 } from './constants'
+
+// --- Phase 1: hand-written structures ---------------------------------------------------------
+// Each export is the whole public surface of that module: if the UI or an algorithm needs
+// something not listed here, the structure is missing an API rather than the barrel needing a
+// wildcard.
+export {
+  MinHeap,
+  byPriority,
+  type HeapComparator,
+  type HeapEntry,
+  type HeapOperations,
+  type HeapViolation,
+} from './structures/min-heap'
+export {
+  Trie,
+  compareMatches,
+  normaliseWord,
+  type TrieMatch,
+  type TrieNode,
+  type TrieRecord,
+} from './structures/trie'
+export {
+  UnionFind,
+  buildComponents,
+  type BuildComponentsOptions,
+  type GraphComponents,
+  type UnionFindStats,
+} from './structures/union-find'
+export { LRUCache, type LRUCacheEntry, type LRUCacheStats } from './structures/lru-cache'
+export {
+  AdjacencyGraph,
+  createGraph,
+  validateGraph,
+  type CreateGraphOptions,
+  type EdgeInput,
+  type NodeInput,
+  type ValidateGraphOptions,
+} from './structures/graph'

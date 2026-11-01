@@ -43,8 +43,10 @@ first, so the scanner chokes on code rather than prose) and fails on:
    `heap-js`, `trie-search`, `dijkstra`, `pathfinding`, `union-find`, `lru-cache`,
    `mnemonist`, `geolib`, …); and a drift check that ESLint's ban list still mirrors the
    test's.
-5. **from Phase 1 onward** — every module under `src/engine/{structures,algorithms,routing,geo}`
-   must have a spec named after it. This rule is live today and passes vacuously.
+5. **live since Phase 1** — every module under `src/engine/{structures,algorithms,routing,geo}`
+   must have a spec named after it, beside it (`structures/trie.ts` → `structures/trie.spec.ts`) or
+   in `src/engine/__tests__/`. `.spec.ts` is the convention for new engine files; `.test.ts` still
+   counts, so nothing can silently stop being covered by changing extension.
 
 `src/test/**` is exempt from the identifier scans in rule 1 and the network scan in rule
 3: the scanner must name the things it forbids, so it would trip over its own vocabulary.

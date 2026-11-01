@@ -262,3 +262,31 @@ describe('test coverage contract (live from Phase 1)', () => {
     expect(missing, `untested engine modules:\n${missing.join('\n')}`).toEqual([])
   })
 })
+
+describe('the guard itself', () => {
+  it('reads specifiers from import/export statements, not from prose', () => {
+    // Three separate false alarms produced this test: a doc comment saying `indistinguishable from
+    // "not added yet"`, a template literal in a test message mentioning the engine alias, and a
+    // sentence that wrapped across two lines between two quoted phrases. Each one reported an
+    // import that did not exist, and a guard that cries wolf gets an exception added to it.
+    const prose = [
+      'const message = `exported from "@third-party" is the rule`',
+      "expect(value, 'see from \"phantom-pkg\"').toBe(true)",
+      'export const ok = 1',
+    ].join('\n')
+    expect(importsOf(prose)).toEqual([])
+
+    const code = [
+      "import { x } from 'real-package'",
+      'import type { Y } from',
+      "  '../deep/path'",
+      "import 'side-effect'",
+      "export { z } from 're-exported'",
+    ].join('\n')
+    // Both sides sorted by code point, because `-` sorts before `a` and an expectation written in
+    // reading order is not an expectation written in sort order.
+    const found = importsOf(code).sort()
+    const wanted = ['../deep/path', 'real-package', 're-exported', 'side-effect'].sort()
+    expect(found).toEqual(wanted)
+  })
+})
