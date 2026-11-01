@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-*/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env / editor noise
+*.local
+.env
+.env.*
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.sw?
+tmp/
+
+# NOTE: src/data/campus.json is deliberately TRACKED. It is the map dataset,
+# not generated output — see docs/MAP-DATA.md.

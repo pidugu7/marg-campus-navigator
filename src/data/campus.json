@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1",
+  "metadata": {
+    "app": "MARG Campus Navigator",
+    "campus": "Amrita Vishwa Vidyapeetham",
+    "campusShort": "Amrita Bengaluru",
+    "location": {
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "country": "IN"
+    },
+    "scaleSource": "none",
+    "dataStatus": "synthetic-placeholder",
+    "authoredBy": "MARG project team",
+    "updatedAt": "2026-11-01",
+    "notes": "Placeholder dataset shipped with Phase 0: the schema and the app shell exist, the geometry does not yet. Phase 2 fills this file with a synthetic Amrita Bengaluru campus; Phase 7's map editor exports a digitised version over the top of it. Routing behaviour is unchanged by that swap because nothing outside this file knows where a building is."
+  },
+  "canvas": {
+    "width": 1600,
+    "height": 1000,
+    "pixelsPerMetre": 1
+  },
+  "zones": [],
+  "nodes": [],
+  "edges": [],
+  "buildings": [],
+  "surfaces": []
+}
