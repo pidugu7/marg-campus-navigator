@@ -65,6 +65,19 @@ is the fallback, and I will say so in the report rather than quietly reorder.
    function, and a Dijkstra whose path is drawn over the walkways it followed is a result. Phase 3
    therefore ends with a `<select>` of place ids as the endpoint picker — deliberately boring, and
    replaced by the trie-backed typeahead in Phase 5, which is where the search work belongs.
+9. **UI components are tested by `renderToStaticMarkup`, not by jsdom.** An earlier note in
+   `vite.config.ts` promised "Phase 5 adds jsdom and they join this list"; that promise is deleted rather than
+   kept, because jsdom is a dependency and the brief closes the dependency list. `react-dom/server` is already
+   installed, so component *output* is assertable in Node and three `.tsx` files joined `coverage.include`;
+   gestures, focus and layout are not, and `route-controls.tsx` sits at 77.77 % with the reason in
+   `ARCHITECTURE.md` instead of being removed from the report.
+10. **The Swap button lives with the pickers, not on the result card** (the plan lists it under the card). It
+    edits the request, and a control that changes what is drawn belongs next to what it changes; the card is
+    therefore free to be read-only, which is what lets its three states be one `<div>` each.
+11. **The picker offers three searches and not four.** `dfs` is written, tested and measured — its routes average
+    6.91 sentences against A\*'s 3.69 — but a depth-first answer on a card that prints "distance" is a teaching
+    aid that misleads. `RouteAlgorithmChoice` is the three-name union, and `ALGORITHM_CHOICES` is keyed by it, so
+    offering a fourth is a compile error in the table rather than a dropdown someone has to remember.
 
 ## Log
 
@@ -622,3 +635,51 @@ engine's union is a compile error here rather than a dropdown that quietly still
 
 **Not in this checkpoint, on purpose.** The result card, the "no route found" state, the responsive pass and the
 README (cp5).
+
+### Phase 3, checkpoint 5 — the result card, the three states, and the responsive pass
+
+**What landed.** `src/ui/route/route-summary.ts` (pure: how a distance is grouped, when minutes become seconds,
+which sentence belongs to which refusal, what angle each turn arrow is rotated to) + `route-card.tsx`, wired into
+`App` under the form. Three states, and no fourth: `null` before anything is asked, `found`, `missing`. 38 new
+specs — `route-summary` 13, `route-card` 13 (a render-and-read test, `react-dom/server`, no DOM), `route-layer`
+7, `route-styles` 5 (stylesheet, class-name and responsive-rule pairing) — for **499 tests in 29 files**, up
+from 461 in 25 at cp4. `useEngineContract`
+gained `walkingSpeedMps` and `minInstructionMetres`, which is how the card can print "at 1.4 m/s" without ever
+importing the engine.
+
+**The card's numbers, and why those.** Distance, duration at the profile's own pace, then `algorithm`,
+`vertices settled`, `search time`, `walkway segments`, `directions`, `places along`, `turns to make` — the last
+two differ on purpose (3 sentences from 10 segments is `simplifyLegs` and the opening heading, visible as a
+number rather than explained in a paragraph). `cached` is *not* shown: in Phase 3 it is always `false`, and a
+metric that can only ever say no is decoration until Phase 4 gives it a second value. Minutes come from
+`RouteFound.minutes`, computed by the engine at `WALKING_SPEED_MPS[profile]`; the card relabels the number, it
+never recomputes it, so there is one source for the pace.
+
+**The refusal says what it looked at.** `describeFailure` pairs the engine's own sentence with the explored
+count — "It settled 41 vertices before concluding this" — because "no route found" reads as a broken app and the
+`exploredOrder` length reads as a search that worked on a map with a hole in it. The five
+`RouteFailureReason`s are duplicated as a local union in the view model *on purpose*: a sixth reason in the
+engine stops compiling here, in the file that has to have an answer for it, rather than in a `default:` branch
+that says "something went wrong". Same for the nine turn buckets, which are also what the stylesheet guard walks.
+
+**Responsive, checked in the two ways available here.** Mechanically, by `route-styles.spec.ts`: every class the
+route UI emits has a rule in `app.css`/`map.css`, all nine `route-step--*` buckets are styled (not just the three
+that appear on a pleasant route), the 900 px block still restyles `.route-pickers` to one column and `.work` to
+one, the 380 px block still restyles `.route-step` and `.route-step-metres`, and 380 still comes after 900 so a
+375 px phone gets the stacked row. And visually, by the map raster at 360/768/1440 (the scratch SSR render from
+cp4, re-run): the line and the pins are placed in world units and scaled in pixels, so the pin is the same size
+in all three and the route still sits on the walkways it followed. The live preview is the remaining judge for
+the HTML card, and `docs/ARCHITECTURE.md` now states plainly which claims a Node harness can and cannot make.
+
+**A number rounded, not a formatting coincidence.** `formatMetres` computes with tenths (`Math.round(m × 10)`,
+then `trunc`/`%`) rather than `toFixed(1).split('.')`, because the split hands back `string | undefined` for the
+fractional half and the only honest fallback for it is a branch that can never fire — one more documented dead
+arm was worse than four lines of arithmetic.
+
+**Phase 3 closed.** What the phase promised, in one line each: four hand-written searches returning one
+`RouteResult` union ✓; Dijkstra pinned against Bellman–Ford and Floyd–Warshall on 200 seeded graphs ✓; A\*
+pinned equal to Dijkstra on every one of them, with the inadmissible case shown as a wrong answer ✓; BFS
+pinned to minimum hops ✓; depth-first pinned against a deletion oracle ✓; every edge attribute able to change
+a route ✓; the frontier and explored order recorded per search ✓; turn-by-turn directions with the fold ✓; a
+route on the map with a result card beside it ✓; `docs/ALGORITHMS.md` at one section per algorithm with
+complexity, an invariant and a worked example ✓. Cost profiles, the LRU cache and `npm run bench` are Phase 4's.

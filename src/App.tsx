@@ -3,7 +3,9 @@ import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIc
 import { useCampus } from '@/hooks/useCampus'
 import { useEngineContract } from '@/hooks/useEngineContract'
 import { useRoute } from '@/hooks/useRoute'
+import { RouteCard } from '@/ui/route/route-card'
 import { RouteControls } from '@/ui/route/route-controls'
+import type { RouteView } from '@/ui/route/route-card'
 import { algorithmChoice, placeOptions, swapEndpoints } from '@/ui/route/route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
 import { MapView } from '@/ui/map/map-view'
@@ -32,8 +34,39 @@ export default function App() {
   const [to, setTo] = useState('')
   const [algorithm, setAlgorithm] = useState<RouteAlgorithmChoice>('a-star')
   const { result } = useRoute(model.graph, from, to, algorithm)
-  const places = useMemo(() => placeOptions(model.nodes, model.edges), [model])
   const labelOf = useMemo(() => new Map(model.nodes.map((node) => [node.id, node.label])), [model])
+
+  // The engine's result, narrowed to what a card can draw. `direction` and `reason` keep their string values on
+  // purpose: the view model declares the unions it needs, so this is where a new turn bucket or a new refusal
+  // reason stops compiling and gets an answer written for it.
+  const view = useMemo<RouteView | null>(() => {
+    if (result === null) return null
+    if (!result.ok) {
+      return {
+        state: 'missing',
+        failure: { reason: result.reason, message: result.message, explored: result.exploredOrder.length },
+      }
+    }
+    return {
+      state: 'found',
+      route: {
+        algorithm: result.algorithm,
+        metres: result.metres,
+        minutes: result.minutes,
+        hops: result.hops,
+        expanded: result.expanded,
+        ms: result.ms,
+        nodeCount: result.nodeIds.length,
+        steps: result.steps.map((step) => ({
+          instruction: step.instruction,
+          metres: step.metres,
+          direction: step.direction,
+        })),
+      },
+      paceMps: engine.walkingSpeedMps[result.profile],
+    }
+  }, [result, engine])
+  const places = useMemo(() => placeOptions(model.nodes, model.edges), [model])
 
   // The map takes four strings and an id list; it never sees a `RouteResult`. Unwrapping the union is this
   // file's job, and it is the only place the two halves of the app are allowed to meet.
@@ -120,6 +153,9 @@ export default function App() {
                 setTo(nextTo)
               }}
             />
+            {/* The answer under the question: the card reads the same state the map is drawing from, so the two
+                can never disagree about which pair is being routed. */}
+            <RouteCard fromLabel={labelOf.get(from) ?? from} toLabel={labelOf.get(to) ?? to} view={view} />
           </section>
 
           <section className="card">

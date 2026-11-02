@@ -714,18 +714,19 @@ query trace; `buildComponents` rebuild cost per closure (the number that justifi
 
 ## Measured results
 
-*Re-measured at Phase 3 checkpoint 2, `npm run check` on this branch (Vitest, Node in the project's own
+*Re-measured at Phase 3 checkpoint 5, `npm run check` on this branch (Vitest, Node in the project's own
 sandbox). These are test-suite facts, not benchmark timings — `npm run bench` is Phase 4 and nothing in this
 table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **461 tests in 25 files** · build ok |
+| `npm run check` | typecheck · lint · **499 tests in 29 files** · build ok |
 | `src/engine` | **262 tests** — structures 77, `algorithms/` 142 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 29), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
 | `src/data` | 86 (`build-graph.spec.ts`) |
-| `src/ui/map` | 64 (view 25, marker-plan 15, tip-content 16, icons 8) |
-| `src/test` | 28 — architecture guard 14, `map:validate` 6, campus routing 6, schema drift 2 |
+| `src/ui` | **118** — `map` 79 (view 25, marker-plan 15, tip-content 16, icons 8, route-plan 8, route-layer 7), `route` 39 (route-options 13, route-summary 13, route-card 13) |
+| `src/test` | 33 — architecture guard 14, `map:validate` 6, campus routing 6, route styles 5, schema drift 2 |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
+| coverage of the route UI | `route-plan.ts`, `route-summary.ts`, `route-card.tsx`, `route-layer.tsx` all **100 %** statements and branches — the last two are components, measured because `renderToStaticMarkup` needs no DOM; `route-options.ts` 100 / 94.44, its one open arm the sort comparator's `0`, which needs two rows with the same label *and* the same id, so it is documented in `route-options.spec.ts` instead of faked; `route-controls.tsx` 77.77 / 100, and the two uncovered lines are its `onChange` arrows, which only a *dispatched* event runs and there is no DOM to dispatch one with — the gap is left in the report rather than the file being taken out of it |
 | sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 profiles (metres, unit, jittered, `× 0.2`), zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
 | the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); `landmarkOf` → 185 legs name something, 1 219 name a junction and therefore say nothing; **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
 | the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |

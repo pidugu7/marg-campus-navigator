@@ -477,6 +477,12 @@
 
 /* Sizes inside a pin are CSS pixels: the group is `scale(unitsPerPx)`'d, so the r values in the layer are
    already in the same space as a badge's. */
+.route-pin {
+  /* The ring's outline is drawn under its fill, so the map-bg hairline sits outside the colour and the pin keeps
+     its diameter where it crosses the route line instead of eating 1.4 px of it. */
+  paint-order: stroke fill;
+}
+
 .route-pin-shape {
   stroke-width: 1.4px;
 }

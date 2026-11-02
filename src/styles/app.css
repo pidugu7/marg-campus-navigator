@@ -302,3 +302,242 @@ body {
     transform: rotate(90deg);
   }
 }
+
+/* ── the result card ────────────────────────────────────────
+   A number, a pair of place names, the cost of finding them, then the turns. The arrow is the only colour
+   decision in the card, and it encodes which *side*: `--accent` for left, `--route-alt` for right — the two
+   tokens the map already uses for the route and its alternative, so a card above a map and the map itself
+   agree about what "left" looks like. Straight and stay get no colour at all, because a heading is not a turn. */
+
+.route-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.route-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.route-pair-start,
+.route-pair-end {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-pair-arrow {
+  color: var(--ink-faint);
+}
+
+.route-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.route-figure-sep {
+  color: var(--ink-faint);
+}
+
+.route-pace {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+.route-status {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.route-metrics {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+}
+
+.route-metric {
+  display: contents;
+}
+
+.route-metrics dt {
+  color: var(--ink-faint);
+}
+
+.route-metrics dd {
+  margin: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.route-steps {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: route-step;
+  /* A long route is a scrollable list, not an infinite card: at 360 the map and this pane share one column, and
+     a 10-step route that pushes the legend off the screen is worse than one you scroll. */
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.route-step {
+  /* Four columns, one row: number, arrow, sentence, distance. `display: contents` on the row's own children is
+     not needed because none of them wrap a container — each of the four is a direct grid item, so the columns
+     above are exactly the four things a reader's eye lands on, in the order the walk happens. */
+  display: grid;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  counter-increment: route-step;
+  background: var(--surface-2);
+}
+
+.route-step::before {
+  content: counter(route-step);
+  grid-column: 1;
+  grid-row: 1;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.route-step-arrow {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+
+.route-step--left .route-step-arrow,
+.route-step--slight-left .route-step-arrow,
+.route-step--sharp-left .route-step-arrow {
+  color: var(--accent);
+}
+
+.route-step--straight .route-step-arrow,
+.route-step--stay .route-step-arrow {
+  /* Written out so the absence of colour is a decision: a turn that has no side still has a row, and `stay` in
+     particular means there is nothing to point at. */
+  color: var(--ink-faint);
+}
+
+.route-step--right .route-step-arrow,
+.route-step--slight-right .route-step-arrow,
+.route-step--sharp-right .route-step-arrow,
+.route-step--uturn .route-step-arrow {
+  color: var(--route-alt);
+}
+
+.route-step-text {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.route-step-metres {
+  grid-column: 4;
+  grid-row: 1;
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+/* Two lines per row under 380 px: an instruction and its distance, rather than an instruction wrapped to four
+   lines next to a number nobody reads. The arrow and the step count keep their places. */
+@media (max-width: 380px) {
+  .route-step {
+    grid-template-columns: 16px 18px minmax(0, 1fr);
+  }
+
+  .route-step-text,
+  .route-step-metres {
+    grid-column: 3;
+    justify-self: start;
+  }
+
+  .route-step-metres {
+    grid-row: 2;
+  }
+}
+
+.route-state {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.route-state svg {
+  justify-self: start;
+  color: var(--ink-faint);
+}
+
+.route-state--idle {
+  /* Styled rather than left to the base rule: an empty pane with no edge of its own reads as a card that failed
+     to paint, and this is the state a reader sees first. */
+  border-left: 3px solid var(--line);
+}
+
+.route-state--missing {
+  background: var(--warn-bg);
+  border-left: 3px solid var(--warn-line);
+  color: var(--warn-ink);
+}
+
+.route-state--missing svg {
+  color: var(--warn-line);
+}
+
+.route-headline {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-state--missing .route-headline {
+  color: var(--warn-ink);
+}
+
+.route-detail,
+.route-looked {
+  margin: 0;
+}
+
+.route-looked {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}

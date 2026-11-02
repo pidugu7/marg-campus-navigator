@@ -24,16 +24,29 @@ Two halves with a one-way door between them.
 Direction is strictly downward. The engine is a leaf: it has no imports pointing back
 out, which is what makes it testable and reusable without a DOM.
 
-### Inside `src/ui`: pure modules, and components that only draw
+### Inside `src/ui`: pure modules, components that only draw, and one that renders in Node
 
 The map is split a second time, on a different axis: **geometry scales with the plate, screen objects
 do not.** `view.ts` (the camera), `marker-plan.ts` (who gets a label), `tip-content.ts` (what a tooltip
-says) and `icons.ts` (which glyph means what) are plain functions over numbers and strings, and they are
-in `coverage.include` beside the engine, because a decision that can be reasoned about can be tested.
-The `.tsx` layers and `use-viewport.ts`/`use-tooltip.ts` hold the parts that need a browser —
-`getBoundingClientRect`, `ResizeObserver`, focus — and they are *excluded by name*, with the reason in
-`vite.config.ts`, rather than quietly omitted from the number. Phase 5 adds jsdom and they join the
-report.
+says), `icons.ts` (which glyph means what), `route-plan.ts` (which vertices of a route can be plotted)
+and `route/route-options.ts` + `route/route-summary.ts` (what the pickers offer, and how a number is
+written) are plain functions over numbers and strings, and they are in `coverage.include` beside the
+engine, because a decision that can be reasoned about can be tested.
+
+Since Phase 3 cp5 the list also holds three `.tsx` components — `route/route-card.tsx`,
+`route/route-controls.tsx` and `map/layers/route-layer.tsx` — because `react-dom/server` is already a
+dependency and `renderToStaticMarkup` needs no DOM: a component whose *output* is assertable is a
+component whose statements are measurable. Two of them are at 100 %; `route-controls.tsx` is at 77.77 %
+and stays in the list at that number, because its two uncovered lines are `onChange` arrows that only a
+*dispatched* event runs — the gap is the honest shape of what a Node-only harness can reach, and taking
+the file out of the report would hide that rather than say it. `src/test/route-styles.spec.ts` adds the
+check the markup cannot make: every class name the route UI emits has a rule in a stylesheet.
+
+What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts` and the
+map layers whose behaviour is `getBoundingClientRect`, `ResizeObserver` and focus — with the reason in
+`vite.config.ts` rather than quietly omitted from the number. Adding jsdom would buy the rest; it would
+also be a new dependency in a project whose dependency list is itself under test, so it is out of scope
+and said so.
 
 ## What `npm test` proves
 

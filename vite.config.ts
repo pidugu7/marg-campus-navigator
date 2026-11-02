@@ -80,6 +80,14 @@ export default defineConfig(({ mode }) => {
           'src/ui/map/tip-content.ts',
           'src/ui/map/icons.ts',
           'src/ui/route/route-options.ts',
+          // Phase 3 cp5: the three route components joined this list because they became *renderable* in Node —
+          // `renderToStaticMarkup` needs no DOM and `react-dom/server` is already a dependency. That covers the
+          // render half of a component, which is most of what they do; the gesture and effect code in the map's
+          // own hooks still has no harness to measure, so it stays out by name.
+          'src/ui/route/route-card.tsx',
+          'src/ui/route/route-controls.tsx',
+          'src/ui/route/route-summary.ts',
+          'src/ui/map/layers/route-layer.tsx',
         ],
         exclude: [
           'src/engine/**/*.test.ts',
