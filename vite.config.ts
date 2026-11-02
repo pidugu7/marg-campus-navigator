@@ -94,6 +94,14 @@ export default defineConfig(({ mode }) => {
           'src/ui/map/replay-plan.ts',
           'src/ui/route/replay-panel.tsx',
           'src/ui/map/layers/replay-layer.tsx',
+          // Phase 4 cp4: compare mode, same arrangement — the decisions in a pure module, the rendering in
+          // components that `renderToStaticMarkup` can reach, and the searching in a hook that is excluded with
+          // the other hooks because a `useMemo` over three calls has no assertions a Node harness can make.
+          'src/ui/compare/compare-plan.ts',
+          'src/ui/compare/compare-table.tsx',
+          'src/ui/compare/compare-legend.tsx',
+          'src/ui/compare/compare-swatch.tsx',
+          'src/ui/map/layers/compare-layer.tsx',
         ],
         exclude: [
           'src/engine/**/*.test.ts',

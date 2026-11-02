@@ -439,7 +439,8 @@ diagonal `a-c`, routed `a` → `c`. The frontier is written as `vertex@cost`, an
 
 `frontierSnapshots` is that fourth column, row by row: `[[], ["d","c"], ["c"], []]`. The answer is 200 m
 over two edges, while the *fewest walkways* answer is the 250 m diagonal — which is why BFS (below) is not
-interchangeable with this, and why the result carries both `cost` and `metres`.
+interchangeable with this, and why the result carries both `cost` and `metres`. The same two columns, read
+across three searches at once instead of one, are §13.
 
 **The table is the replay.** Those last two columns are the only input the UI needs to animate the search:
 step *k* shows the first *k* entries of `exploredOrder` shaded and `frontierSnapshots[k-1]` pulsing, with the
@@ -798,6 +799,54 @@ case was built by moving the far point 0.001 *sideways* from the corner, which i
 implementation said so; and a blocked-edge ratio was expected as `300 / 100` when the drawn length is
 `hypot(100, 10)`, because the point is offset diagonally. Both were fixed in the spec, not in the code, which
 is the outcome a reference model is supposed to have.
+
+---
+
+## 13. Compare mode — three searches, one query (`ui/compare/`, `hooks/useCompare.ts`)
+
+Nothing new runs here: `useCompare` asks the same `runSearch` seam the card uses, three times, with the pair, the
+preference and the graph held identical — so the only thing that can differ in the table is the algorithm, which
+is the point of asking. The row is five numbers, four of which are the engine's own metrics: `metres`,
+`minutes`, `expanded` (vertices drawn off the frontier), `ms`, and `hops` printed as *segments*.
+
+**The timing column does not compete.** `RouteMetrics.ms` is whole milliseconds, so on 39 vertices all three
+rows usually read `0` and the difference between two `0`s is not a finding; what a sub-millisecond measurement
+actually reports is the JIT and the scheduler. The column is there to be looked at and *not* ranked —
+`COLUMNS` marks it `decides: false`, and `bestIn` returns the empty set for a column that does not decide, which
+`compare-table.spec.ts` pins by asserting that a fixture with an unambiguous 1 ms / 9 ms / 11 ms spread still
+carries no mark in that column. Distance, time, settled vertices and segments are deterministic; a winner is
+never chosen from noise.
+
+**What a sweep of the real campus shows.** `src/test/compare-campus.spec.ts` runs the comparison over all
+1 482 ordered pairs, against a Bellman-Ford written into the spec rather than imported:
+
+| claim | measured |
+| --- | --- |
+| the table's best distance equals the hand-written optimum | all 1 482 pairs, within the engine's own 0.1 m rounding |
+| Dijkstra and A\* tie on distance, so both are marked | 1 482 / 1 482 |
+| A\* never settles more vertices than Dijkstra | 1 482 / 1 482 (the admissibility claim, checked not asserted) |
+| A\* settles strictly fewer | 1 431 pairs; 51 ties, all short hops across one corridor |
+| BFS is among the best on segments | 1 482 / 1 482, and strictly best on 100 |
+
+That last row is the lesson the header hint carries: breadth-first *minimises* segments, so it can never lose
+that column, and it is strictly better on only 100 pairs because on a walkway graph the shortest walk is usually
+also the one with fewest crossings. A column a search optimises by construction is worth marking and worth
+saying so under.
+
+**Three lanes, not three colours.** Coincidence is the failure mode of an overlay: on this campus A\* walks
+Dijkstra's exact route for most pairs, and three identical polylines resolve to whichever was painted last. Each
+algorithm therefore owns a lane — Dijkstra on the walkway, A\* 4 px to a walker's left, BFS 4 px to the right —
+and the dash pattern carries the identity, so the legend can name both in words (`solid line, drawn on the
+walkway`). The offset is `LANE_OFFSET_PX`, and `route-styles.spec.ts` reads the stylesheet's `stroke-width` back
+and requires the offset to *exceed* it: at 3 px of paint, 2.6 px of separation was three lanes in the code and
+one thick line on the screen, which is exactly the class of fact a markup test cannot see.
+
+**The sentence is derived.** `compareInsight` writes one line from the rows, and its spec asserts a property
+rather than an example: over 200 seeded triples and all 1 482 real pairs × 2 preferences, every number that
+appears in the output appears in the input (or is the difference of two inputs). Six arms — nothing asked, a
+refusal, the same place twice, all three identical, same walk with different work, breadth-first tying the cost
+while being longer in metres — and one that refuses to compare fewer than three answers, because a two-way tie is
+not a result.
 
 ---
 

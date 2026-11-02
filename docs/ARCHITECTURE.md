@@ -37,18 +37,18 @@ Since Phase 3 cp5 the list also holds five `.tsx` components — `route/route-ca
 `route/route-controls.tsx`, `map/layers/route-layer.tsx`, and since Phase 4 cp3 `route/replay-panel.tsx` and
 `map/layers/replay-layer.tsx` — because `react-dom/server` is already a
 dependency and `renderToStaticMarkup` needs no DOM: a component whose *output* is assertable is a
-component whose statements are measurable. Four of the five are at 100 %. `route-controls.tsx` is at 76.92 %
-and stays in the list at that number, because its three uncovered lines are `onChange` arrows — one per
-`<select>` — that only a *dispatched* event runs; the gap is the honest shape of what a static render reaches,
-and taking the file out of the report would hide that rather than say it.
-
-The replay panel does not have that gap, and the reason is worth copying. `ReplayPanel` holds no state, so its
-spec calls the component as the function it is, walks the element tree that comes back, and invokes the handler
-found there — an `onKeyDown` is a property, and a property does not need a document to be *called*. Five keys,
-five buttons, a slider and a speed select are covered that way, and the payoff is not the number: it is that a
-button's label and the action it dispatches are pinned together, which is the class of bug Phase 4 cp2 actually
-found. The same technique would take `route-controls.tsx` to 100 %; it is left for the checkpoint that next
-touches that file, and named here so nobody mistakes the 76.92 % for a limit of the harness. One branch stays
+component whose statements are measurable — with `compare-table.tsx`, `compare-legend.tsx`,
+`compare-swatch.tsx` and `map/layers/compare-layer.tsx` since cp4, nine in all — every one of them at 100 %
+statements. They were not always: `route-controls.tsx` carried 76.92 % from Phase 3 to Phase 4 on three
+`onChange` arrows that only a *dispatched* event runs, and the gap was described as the honest shape of a static
+render. It was not. `ReplayPanel` holds no state, so its spec calls the component as the function it is, walks the
+element tree that comes back, and invokes the handler found there — an `onKeyDown` is a property, and a property
+does not need a document to be *called*. Five keys, five buttons, a slider and a speed select became coverable
+that way, and the payoff was not the number: it is that a control's label and the action it dispatches get pinned
+together, which is the class of bug cp2 actually found. cp4 applied the same technique to the route form (its own
+`route-controls.spec.ts`, eight tests, plus the compare checkbox), so the 76.92 % line is gone from this
+paragraph rather than still being excused by it. The lesson is recorded where it belongs: a limitation of the
+harness is worth naming, and a limitation of *imagination* is not. One branch stays
 open in `replay-plan.ts` — the `?? null` on the line that reads `exploredOrder[step - 1]`, unreachable because
 `step` is clamped to the array's own length and required by `noUncheckedIndexedAccess` all the same. It is
 documented rather than tested, per the rule this project set in Phase 1. `src/test/route-styles.spec.ts` adds the
@@ -77,7 +77,17 @@ by a `@media` rule in `map.css`, and the clock never starts itself, which makes 
 everyone and is a stronger promise than a branch that might not run. `src/test/route-styles.spec.ts` asserts the
 media query exists and names the right selector, because that is the part CSS can be held to.
 
-What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts` and the
+Compare mode is that arrangement one level up. `ui/compare/compare-plan.ts` owns the three decisions the feature
+makes — which value wins a column (`bestIn`, with a `decides: false` column returning the empty set so the timing
+measurement can never be ranked), how a coincident route stays visible (`LANE_OFFSET_PX`, `offsetPxOf`,
+`shiftedSegment`), and what the numbers mean in a sentence (`compareInsight`) — and `hooks/useCompare.ts` runs
+the three searches through `runSearch`, the seam `useRoute` already owned, so "the same question three ways" is
+literally the same call rather than a second switch to keep honest. The components render; the plan module
+decides; `src/test/compare-campus.spec.ts` measures the result against a Bellman-Ford written into the spec, so
+the table's "best" is an optimum and not a minimum of whatever happened to run.
+
+What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts`, `useCompare.ts`
+and the
 map layers whose behaviour is `getBoundingClientRect`, `ResizeObserver` and focus — with the reason in
 `vite.config.ts` rather than quietly omitted from the number. Adding jsdom would buy the rest; it would
 also be a new dependency in a project whose dependency list is itself under test, so it is out of scope

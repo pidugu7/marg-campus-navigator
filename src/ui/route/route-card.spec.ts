@@ -88,6 +88,8 @@ describe('the route form', () => {
         onAlgorithm: () => {},
         onProfile: () => {},
         onSwap: () => {},
+        compare: false,
+        onCompare: () => {},
       }),
     )
   }
@@ -194,6 +196,8 @@ describe('the route form', () => {
         onAlgorithm: () => {},
         onProfile: () => {},
         onSwap: () => {},
+        compare: false,
+        onCompare: () => {},
       }),
     )
     expect(html).toContain('id="route-profile"')
@@ -221,6 +225,8 @@ describe('the route form', () => {
         onAlgorithm: () => {},
         onProfile: () => {},
         onSwap: () => {},
+        compare: false,
+        onCompare: () => {},
       }),
     )
     expect(withIsolated).toContain('value="atm" disabled')

@@ -31,6 +31,13 @@ export interface RouteControlsProps {
   readonly onAlgorithm: (algorithm: RouteAlgorithmChoice) => void
   readonly onProfile: (profile: ProfileName) => void
   readonly onSwap: () => void
+  /**
+   * Compare mode: one more knob on the request, and the only one that changes *what is asked* rather than what
+   * the answer is. It lives in the form because a comparison of three searches is a different question, and a
+   * control that sits next to the results invites the reader to think the results were already comparative.
+   */
+  readonly compare: boolean
+  readonly onCompare: (next: boolean) => void
 }
 
 interface PickerProps {
@@ -41,7 +48,11 @@ interface PickerProps {
   readonly onSelect: (id: string) => void
 }
 
-function PlacePicker({ id, caption, value, options, onSelect }: PickerProps) {
+/**
+ * One place picker. Exported because it owns a rule of its own — the unreachable rows and the arrow that reads
+ * them — and a rule that lives inside a private wrapper is a rule no test can reach without a DOM.
+ */
+export function PlacePicker({ id, caption, value, options, onSelect }: PickerProps) {
   const rows = pickerRows(options, value)
   return (
     <div className="field">
@@ -79,6 +90,8 @@ export function RouteControls({
   onAlgorithm,
   onProfile,
   onSwap,
+  compare,
+  onCompare,
 }: RouteControlsProps) {
   const choice = algorithmChoice(algorithm)
   // A `find` left optional rather than a lookup promised total, and no helper for it: if a row is ever missing the
@@ -140,6 +153,16 @@ export function RouteControls({
           ))}
         </select>
       </div>
+      <label className="compare-toggle" htmlFor="route-compare">
+        <input
+          id="route-compare"
+          className="compare-toggle-box"
+          type="checkbox"
+          checked={compare}
+          onChange={(event) => onCompare(event.target.checked)}
+        />
+        Compare all three searches
+      </label>
       {/* Two sentences, because two decisions: the preference says what the *route* is for, the algorithm says
           how it is found. Merging them into one paragraph would be the shorter markup and the worse lesson. */}
       {trade === undefined ? null : <p className="route-note">{trade.note}</p>}

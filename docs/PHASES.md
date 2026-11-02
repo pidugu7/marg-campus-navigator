@@ -878,3 +878,70 @@ frame. Two notes, so the proof is not oversold: librsvg ignores `var()` and `vec
 came back with no stroke at all and needed the tokens substituted by hand — a harness limitation, not an app
 bug; and the HTML panel cannot be rasterised here, so its narrow layout rests on the stylesheet rules (26→30 px
 buttons at 32 px under 380 px, flex-wrapped row) and on the preview, which is open.
+
+
+### Phase 4, checkpoint 4 — compare mode: three searches, one query, one sentence about them
+
+**Done.** The same request asked three ways, on screen at once.
+
+`useCompare` calls the `runSearch` seam `useRoute` already owned — three times, with the pair, the preference and
+the graph held identical, so the only thing that can differ is the algorithm. That seam is now exported (the
+second copy of the `if (algorithm === …)` ladder would have been a second thing to keep honest), and
+`cost-profiles.spec.ts` gained assertions that the compare hook goes through it and names no search directly.
+
+**The table.** Five columns: distance, walking time, vertices settled, search time, segments. `COLUMNS` carries
+`decides: true` on four of them and `false` on `ms`, and `bestIn` returns the empty set for a column that does not
+decide — so the timing figure is printed, explained and never ranked. `RouteMetrics.ms` is whole milliseconds, so
+on 39 vertices all three rows read `0` most of the time; a "winner" chosen from that is the JIT, not the
+algorithm. Real table markup: `<caption>` holding the rule in words (a caption travels with the table into the
+accessibility tree, a tooltip does not), `scope="col"` on six headers and `scope="row"` on three, `aria-label` on a
+focusable scroll region so 360 px keeps five columns instead of shrinking them, and every best cell also *says*
+", best of the searches that found a route" in clipped text. A tie marks all tied rows: one mark between two equal
+numbers would be a claim about tie-breaking the data does not support.
+
+**The overlay, and the bug the screenshot caught.** Three coincident polylines resolve to whichever was painted
+last, so each algorithm owns a lane — Dijkstra on the walkway, A* to a walker's left, BFS to the right — and the
+dash pattern carries the identity (`solid line, drawn on the walkway` in the legend, in words). Offset per
+*segment* along that segment's own normal (`shiftedSegment`), because a route that turns has no single normal and
+mitering three of them grows spikes. Rasterising it found a real defect: 2.6 px of separation against a 3.4 px
+stroke is three lanes in the code and one thick line on the screen. So the offset is `LANE_OFFSET_PX = 4`, the
+lanes are 3 px, and `route-styles.spec.ts` reads the stylesheet's `stroke-width` back and requires the offset to
+exceed it — an inequality between a number in TypeScript and a number in CSS, checked rather than trusted. The
+same test caught `stroke-dasharray` in JSX: React drops that attribute with a console warning in a browser while
+`renderToStaticMarkup` prints it anyway, so every markup test was green on a screen with no dashes at all.
+`strokeDasharray` now, pinned in the guard.
+
+**The sentence.** `compareInsight` writes one line from the rows and nothing else, with six arms: nothing asked,
+a refusal, the same place twice, all three identical, same walk with different work, and breadth-first tying the
+cost while being longer in metres. Its spec asserts a property rather than an example — every figure in the output
+is in the input, or is the difference of two inputs — over 200 seeded triples and all 1 482 ordered campus pairs ×
+2 preferences. It also refuses to credit A* with work it did not save (the `expanded` difference is read, not
+assumed positive), which is the arm that exists for an admissible-but-inconsistent estimate.
+
+**Meaning never depends on colour.** The swatch beside every row and every legend line is `currentColor` — the
+component paints no hue of its own, and the guard asserts that — so the table, the legend and the map can be
+matched by pattern alone. The hues live only in `map.css`.
+
+**Tests: 630 in 40 files**, up from 571 in 34. Composition: 25 `ui/compare/compare-plan.spec.ts`, 8
+`compare-table.spec.ts`, 4 `compare-legend.spec.ts`, 6 `layers/compare-layer.spec.ts`, 8
+`ui/route/route-controls.spec.ts` (new), 7 `src/test/compare-campus.spec.ts`, and 2 more in
+`src/test/route-styles.spec.ts`. Nothing removed and nothing relaxed: `vitest list` was diffed against a
+throwaway worktree at the cp3 tip, where the set of dropped test ids is empty and 60 ids were added. Three
+`route-card.spec.ts` fixtures gained `compare`/`onCompare` because the component's contract grew two required
+props, and `cost-profiles.spec.ts`'s `run(` → `runSearch(` expectation was *retargeted, not deleted* — it now
+also asserts the export exists and that the compare hook names no search directly.
+
+Coverage: All files **99.14 / 95.54 / 100 / 99.58**, functions 100 % project-wide. `compare-plan.ts`,
+`compare-table.tsx`, `compare-legend.tsx`, `compare-swatch.tsx`, `compare-layer.tsx` — all 100 on all four
+metrics, as is `route-controls.tsx`, whose 76.92 % from Phase 3 is gone: the handler-invoke technique that cp3
+introduced for the replay panel was applied to the form, so the debt was paid in the checkpoint that touched the
+file rather than carried further. `useCompare.ts` is excluded by name with the other hook code, and
+`vite.config.ts` says why.
+
+**Checked live, not just statically.** Dev server 200 for `App.tsx`, `useCompare.ts`, `compare-plan.ts`,
+`compare-table.tsx`, `compare-legend.tsx`, `compare-layer.tsx`, `route-controls.tsx`, `app.css`, `map.css`. The
+overlay was rasterised at 360/768/1440 with the real campus, the real stylesheet and the `labs → hostel-2` pair
+where A* and Dijkstra walk identical corridors: three separable lanes at every width, BFS's divergence visible on
+its own, none occluding another. As before, the harness needs the CSS custom properties substituted (librsvg has
+none) — a harness limit, stated; and the HTML table cannot be rasterised here, so its 360 px layout rests on the
+`overflow-x` rules, the `tabindex=0` region and the live preview.

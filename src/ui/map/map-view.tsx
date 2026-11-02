@@ -22,6 +22,8 @@ import { useMemo, useRef } from 'react'
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { DEFAULT_EDGE_ATTRIBUTES } from '@/data'
 import type { BuildingSpec, CampusModel, CanvasSpec, NodeSpec, SurfaceSpec, ZoneSpec } from '@/data'
+import { CompareLayer } from '@/ui/map/layers/compare-layer'
+import type { CompareLane } from '@/ui/compare/compare-plan'
 import { ReplayLayer } from './layers/replay-layer'
 import { RouteLayer } from './layers/route-layer'
 import { BaseLayer } from './layers/base-layer'
@@ -61,6 +63,11 @@ export interface MapViewProps {
    * panel that owns the clock is beside it. `null` means the map draws no overlay, which is the normal case.
    */
   readonly replay?: ReplayFrame | null
+  /**
+   * The three comparison routes to paint in three lanes, or `null`. Ids rather than geometry for the same reason
+   * the route prop is ids: the map owns the coordinate lookup and nothing else.
+   */
+  readonly compare?: readonly CompareLane[] | null
 }
 
 /** What the route layer needs, in the map's own vocabulary. */
@@ -74,7 +81,7 @@ export interface MapViewRoute {
 
 const UNZONED = 'var(--walk-case)'
 
-export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep, route, replay }: MapViewProps) {
+export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep, route, replay, compare }: MapViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const extent = useMemo(() => extentOf(canvas), [canvas])
   const viewport = useViewport(extent.width, extent.height, svgRef)
@@ -230,6 +237,9 @@ export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, 
             route is what the footprint produced. Drawing it over the line would let the lesson hide the
             conclusion. */}
         {replay ? <ReplayLayer frame={replay} positions={positions} unitsPerPx={unitsPerPx} /> : null}
+        {compare === null || compare === undefined || compare.length === 0 ? null : (
+          <CompareLayer lanes={compare} positions={positions} unitsPerPx={unitsPerPx} />
+        )}
         {route ? (
           <RouteLayer
             nodeIds={route.nodeIds}

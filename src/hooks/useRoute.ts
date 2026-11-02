@@ -42,8 +42,14 @@ export interface RouteHookState {
   readonly to: NodeId
 }
 
-/** The search named by `algorithm`, on the cost function named by `profile`. */
-function run(
+/**
+ * The search named by `algorithm`, on the cost function named by `profile`.
+ *
+ * Exported, because this is the one place in the app where a picker's string becomes a function call, and a
+ * second copy of that switch is a second thing to keep honest: `useCompare` asks three searches the same question
+ * and needs the guarantee that "the same question" is literally the same call.
+ */
+export function runSearch(
   index: GraphIndex,
   from: NodeId,
   to: NodeId,
@@ -76,9 +82,9 @@ export function useRoute(
 ): RouteHookState {
   const { result, baseline } = useMemo(() => {
     if (index === null || from === '' || to === '') return { result: null, baseline: null } as const
-    const answer = run(index, from, to, algorithm, profile)
+    const answer = runSearch(index, from, to, algorithm, profile)
     if (profile === 'shortest') return { result: answer, baseline: null } as const
-    return { result: answer, baseline: run(index, from, to, algorithm, 'shortest') } as const
+    return { result: answer, baseline: runSearch(index, from, to, algorithm, 'shortest') } as const
   }, [index, from, to, algorithm, profile])
 
   const asked = index !== null && from !== '' && to !== ''

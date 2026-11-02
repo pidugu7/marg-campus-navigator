@@ -568,3 +568,34 @@
     opacity: 0.55;
   }
 }
+
+/* --- the compare overlay (Phase 4) -------------------------------------------------------------------
+   Three searches, three lanes. The hue is decoration here: which line is which is carried by the dash pattern
+   and by the lane the legend names, both of which survive greyscale. */
+.layer-compare {
+  pointer-events: none;
+}
+
+.compare-line line {
+  fill: none;
+  /* 3 px, and `LANE_OFFSET_PX` in `compare-plan.ts` is 4: the lanes have to be further apart than they are
+     wide, and the stylesheet guard asserts exactly that inequality. */
+  stroke-width: 3;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.92;
+}
+
+.compare-line--dijkstra line {
+  stroke: var(--route);
+  stroke-width: 3.6;
+}
+
+.compare-line--a-star line {
+  stroke: var(--route-end);
+}
+
+.compare-line--bfs line {
+  stroke: var(--warn-line);
+  opacity: 0.85;
+}

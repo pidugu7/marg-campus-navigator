@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIcon } from 'lucide-react'
+import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIcon, Table } from 'lucide-react'
 import { useCampus } from '@/hooks/useCampus'
 import { useEngineContract } from '@/hooks/useEngineContract'
 import { useRoute } from '@/hooks/useRoute'
@@ -13,6 +13,10 @@ import { profileDelta } from '@/ui/route/route-summary'
 import { useReplay } from '@/hooks/useReplay'
 import type { ProfileName } from '@/ui/route/route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
+import { CompareLegend } from '@/ui/compare/compare-legend'
+import { CompareTable } from '@/ui/compare/compare-table'
+import { compareInsight, lanesOf } from '@/ui/compare/compare-plan'
+import { useCompare } from '@/hooks/useCompare'
 import { MapView } from '@/ui/map/map-view'
 import '@/styles/app.css'
 import '@/styles/map.css'
@@ -61,6 +65,23 @@ export default function App() {
     [result, from],
   )
   const replay = useReplay(replaySource, `${from}>${to} ${algorithm} ${profile}`)
+
+  // Compare mode is the same request asked three ways, so it takes its arguments from the same four pieces of
+  // state and nothing else: any difference in the table then has to come from the algorithm. The insight sentence
+  // is generated from the rows below, never written here.
+  const [compare, setCompare] = useState(false)
+  const comparison = useCompare(model.graph, from, to, profile, compare)
+  const labelOfAlgorithm = useMemo(() => (name: RouteAlgorithmChoice) => algorithmChoice(name).label, [])
+  const insight = useMemo(
+    () =>
+      compareInsight(comparison.rows, {
+        sameEndpoint: from !== '' && from === to,
+        profile: engine.profiles[profile].label,
+        labelOf: labelOfAlgorithm,
+      }),
+    [comparison.rows, from, to, profile, engine, labelOfAlgorithm],
+  )
+  const lanes = compare ? lanesOf(comparison.rows) : []
 
   // The engine's result, narrowed to what a card can draw. `direction` and `reason` keep their string values on
   // purpose: the view model declares the unions it needs, so this is where a new turn bucket or a new refusal
@@ -166,6 +187,7 @@ export default function App() {
           gridStep={gridStep}
           route={route}
           replay={replay.available ? replay.frame : null}
+          compare={lanes.length === 0 ? null : lanes}
         />
 
         <aside className="side">
@@ -185,6 +207,8 @@ export default function App() {
               onTo={setTo}
               onAlgorithm={setAlgorithm}
               onProfile={setProfile}
+              compare={compare}
+              onCompare={setCompare}
               onSwap={() => {
                 // One pair of updates, both from the previous values: two `setState` calls that read the state
                 // above them would swap `a → b` into `b → b`, because React hands each callback the value from
@@ -209,6 +233,24 @@ export default function App() {
               />
             )}
           </section>
+
+          {/* Its own card, and only when it was asked for: three searches that nobody wants are three searches
+              that should not run, and a table of nothing is a hole in the column where the map report lives. */}
+          {compare && comparison.active ? (
+            <section className="card">
+              <h2>
+                <Table size={13} aria-hidden="true" />
+                Compare
+              </h2>
+              <CompareLegend rows={comparison.rows} labelOf={labelOfAlgorithm} />
+              <CompareTable
+                rows={comparison.rows}
+                labelOf={labelOfAlgorithm}
+                profileLabel={engine.profiles[profile].label}
+                insight={insight}
+              />
+            </section>
+          ) : null}
 
           <section className="card">
             <h2>

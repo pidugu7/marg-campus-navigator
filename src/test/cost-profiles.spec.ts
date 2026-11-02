@@ -82,8 +82,18 @@ describe('the preference selector', () => {
     // so the card's "at 1.3 m/s" cannot be a number the UI chose.
     expect(app).toContain('engine.walkingSpeedMps[result.profile]')
     expect(Object.keys(WALKING_SPEED_MPS).sort()).toEqual([...PROFILE_ORDER].sort())
-    // …and the hook is where the second search happens, so a component never asks for two routes itself.
-    expect(source('src/hooks/useRoute.ts')).toContain("run(index, from, to, algorithm, 'shortest')")
+    // …and the hook is where the second search happens, so a component never asks for two routes itself. In cp4
+    // the same seam gained a name — `runSearch`, exported — because compare mode asks *three* searches the same
+    // question and a second copy of the switch would be a second thing to keep honest. So: the baseline is still
+    // taken inside the hook, and the only other caller goes through the same one function.
+    const useRoute = source('src/hooks/useRoute.ts')
+    expect(useRoute).toContain("runSearch(index, from, to, algorithm, 'shortest')")
+    expect(useRoute).toContain('export function runSearch(')
+    const useCompare = source('src/hooks/useCompare.ts')
+    expect(useCompare).toContain('runSearch(index, from, to, algorithm, profile)')
+    for (const name of ['dijkstra(', 'aStar(', 'bfs(']) {
+      expect(useCompare, `a search named directly in the compare hook`).not.toContain(`= ${name}`)
+    }
   })
 
   it('leaves the note optional rather than promising a row that may not exist', () => {

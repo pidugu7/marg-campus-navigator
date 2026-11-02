@@ -18,6 +18,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { TURN_DIRECTIONS } from '@/ui/route/route-summary'
+import { LANE_OFFSET_PX } from '@/ui/compare/compare-plan'
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8')
 
@@ -32,6 +33,10 @@ const sources = {
   layer: read('../ui/map/layers/route-layer.tsx'),
   replayPanel: read('../ui/route/replay-panel.tsx'),
   replayLayer: read('../ui/map/layers/replay-layer.tsx'),
+  compareTable: read('../ui/compare/compare-table.tsx'),
+  compareLegend: read('../ui/compare/compare-legend.tsx'),
+  compareSwatch: read('../ui/compare/compare-swatch.tsx'),
+  compareLayer: read('../ui/map/layers/compare-layer.tsx'),
 }
 
 /** Class names a stylesheet can reach — any selector mentioning `.name`, including in a descendant pair. */
@@ -119,6 +124,66 @@ describe('the route UI and the stylesheets', () => {
     expect(sheets.app.indexOf('@media (max-width: 380px)')).toBeGreaterThan(sheets.app.indexOf('@media (max-width: 900px)'))
   })
 
+  it('styles every lane and every swatch, not just the route that happens to be shortest', () => {
+    // The class names are interpolated from the algorithm id, so a fourth search in `useRoute.ts` would emit a
+    // class nobody styled — the same failure the nine turn buckets are guarded against, one layer over.
+    expect(sources.compareLayer).toContain('compare-line--${algorithm}')
+    expect(sources.compareLayer).not.toContain('compare-swatch-line--')
+    for (const name of ['dijkstra', 'a-star', 'bfs']) {
+      expect(defined.has(`compare-line--${name}`), `compare-line--${name}`).toBe(true)
+    }
+    // …and the swatch that carries the meaning in the legend and the table is *monochrome*: a per-algorithm hue
+    // in there would make the colour the second channel the requirement says it must not be.
+    const swatch = /\.compare-swatch-line \{([^}]*)\}/.exec(sheets.app)
+    if (swatch === null) return expect.fail('no .compare-swatch-line rule in app.css')
+    expect(String(swatch[1])).toContain('stroke: currentColor')
+    // …and the component paints no colour of its own: an inline `stroke="…"` here would put the hue back in the
+    // one place the requirement says must work without it.
+    expect(sources.compareSwatch).not.toContain('stroke="')
+    expect(sources.compareSwatch).not.toContain("'stroke'")
+    // The SVG attribute name is a React trap rather than a CSS one: `stroke-dasharray` in JSX warns and *drops*
+    // the attribute in a browser, while `renderToStaticMarkup` prints it anyway — so a markup test is green on a
+    // screen with no dashes at all. Both files must use the camelCase prop, and this is the only place that fact
+    // can be checked.
+    for (const source of [sources.compareSwatch, sources.compareLayer]) {
+      expect(source).toContain('strokeDasharray')
+      expect(source).not.toContain("'stroke-dasharray'")
+    }
+    // And the lane that is *not* on the walkway has to be painted differently from the one that is, or the
+    // separation the layer computes is invisible: three identical strokes are one stroke with extra steps.
+    const strokes = ['dijkstra', 'a-star', 'bfs'].map((name) => {
+      const rule = new RegExp(`\\.compare-line--${name} line \\{([^}]*)\\}`).exec(sheets.map)
+      return String(rule === null ? '' : rule[1]).replace(/\s+/g, ' ').trim()
+    })
+    expect(new Set(strokes).size).toBe(3)
+    for (const stroke of strokes) expect(stroke).toContain('stroke:')
+    // The inequality that makes three lanes visible rather than three lanes claimed: the offset in the plan
+    // module has to exceed every lane's own stroke width, or the paint merges and the overlay is one thick line
+    // with a story attached. Numbers live in two files, so the check has to too.
+    // Effective width per lane: the two flanking rules inherit the base `stroke-width`, so the cascade has to be
+    // read the way a browser reads it — the lane's own value if it declares one, the base rule's otherwise.
+    const base = /\.compare-line line \{([^}]*)\}/.exec(sheets.map)
+    const baseWidth = Number(/stroke-width:\s*([\d.]+)/.exec(String(base?.[1]))?.[1] ?? 0)
+    expect(baseWidth, 'the base lane rule declares a stroke width').toBeGreaterThan(0)
+    const widths = strokes.map((body) => Number(/stroke-width:\s*([\d.]+)/.exec(body)?.[1] ?? baseWidth))
+    for (const width of widths) {
+      expect(width, 'a lane with no stroke width paints nothing').toBeGreaterThan(0)
+      expect(LANE_OFFSET_PX, `offset against a ${String(width)} px stroke`).toBeGreaterThan(width)
+    }
+  })
+
+  it('hides the screen-reader text by clipping, not by hiding', () => {
+    // `display: none` removes the node from the accessibility tree, which is the one thing `.sr-only` must never
+    // do — so the rule that makes the compare table's "best of the searches that found a route" audible is
+    // checked for the mechanism, not just for existing.
+    const rule = /\.sr-only \{([^}]*)\}/.exec(sheets.app)
+    if (rule === null) return expect.fail('no .sr-only rule in app.css')
+    const body = String(rule[1])
+    expect(body).toContain('clip-path')
+    expect(body).not.toContain('display: none')
+    expect(body).toContain('width: 1px')
+  })
+
   it('answers prefers-reduced-motion in CSS, not in a branch', () => {
     // The panel does have a `reduced` flag, but it only refuses to *autoplay*. The pulse itself is silenced by a
     // media query, so a reader who set the preference gets the reduced result even when the flag could not be
@@ -147,12 +212,34 @@ describe('the route UI and the stylesheets', () => {
     // The replay's overlay classes go in `map.css` because they are plate geometry: they scale with the world
     // and they are drawn by a layer, not by a card.
     plateClasses.push('layer-replay', 'replay-node', 'replay-node--current', 'replay-frontier', 'replay-path')
+    plateClasses.push('layer-compare', 'compare-line', 'compare-line--dijkstra', 'compare-line--a-star', 'compare-line--bfs')
     for (const name of plateClasses) {
       expect(inMap.has(name), name).toBe(true)
     }
     const pageClasses = ['route-card', 'route-form', 'route-pickers', 'route-swap', 'picker', 'route-step', 'route-state', 'route-metrics', 'route-note']
     // …and the panel's controls go in `app.css`, because a button is page furniture at any zoom level.
     pageClasses.push(
+      'compare-figure',
+      'compare-body',
+      'compare-table',
+      'compare-caption',
+      'compare-rowhead',
+      'compare-flag',
+      'compare-cell',
+      'compare-cell--best',
+      'compare-insight',
+      'compare-legend',
+      'compare-legend-title',
+      'compare-legend-list',
+      'compare-legend-item',
+      'compare-legend-name',
+      'compare-legend-lane',
+      'compare-legend-note',
+      'compare-swatch',
+      'compare-swatch-line',
+      'compare-toggle',
+      'compare-toggle-box',
+      'sr-only',
       'replay-panel',
       'replay-buttons',
       'replay-button',
