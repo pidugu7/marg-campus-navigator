@@ -764,3 +764,66 @@ comparisons in this file use `toBeCloseTo(…, 9)` where the arithmetic is binar
 where both sides are the same expression. An earlier draft of the stair fixture asserted `3796` where the engine
 said `2740`, which was two mistakes in one line: the `roughness` term applied to a `stairs` surface it does not
 cover, and `2300` written where `2740` is the product. Both are in the test now as claims, not as corrections.
+
+
+---
+
+### Phase 4, checkpoint 2 — the preference in the form, and its price on the card
+
+**What the checkpoint is.** A cost-profile selector in the UI, and a result card that names the profile and
+states the change in distance and time against the shortest route.
+
+**Three files grew a line each, and one grew a search.** `useEngineContract` now hands over `profiles` (the
+engine's own record) and `profileOrder`; `route-options.ts` narrows them to `ProfileChoice` rows typed by the
+UI's `ProfileName` union — the same duplication-as-check trick as `DirectionName` and `FailureView.reason`, so a
+sixth profile in `routing/cost.ts` stops compiling in the one file that would have to name it on screen;
+`route-controls.tsx` gained a third `<select>`, labelled `Preference`, with the profile's own sentence beneath
+it; and `useRoute` takes `profile` and runs the *baseline* query beside it — same index, same algorithm,
+`shortest` — so a Δ is measured on one graph rather than assembled from two screens' worth of assumptions. The
+hook returns `baseline: null` when the request already was the baseline, which is why the card prints a name and
+no price for `shortest` instead of `0 m`.
+
+**The Δ is arithmetic, so it is not in a component.** `profileDelta` and `formatDelta` live in
+`route-summary.ts` beside `formatMetres` and `formatMinutes`, and the card prints what they return. Three
+decisions inside them, each with a test: both totals are rounded *through* tenths, so a difference of nothing
+reads `the same walk` rather than `+0.0 m` (the residue of two one-decimal numbers is 0.30000000000000004, and
+a caption that quotes it is quoting floating point); each part is formatted by the same function as the number
+above it, so a 1 246 m difference groups its thousands and an 18-second difference says seconds; and the
+`same walk · +18 s` form exists for BFS, whose route no preference can move while its pace still re-quotes the
+minutes — `+0 m` there would read as a bug in the search.
+
+**The label is quoted in the sentence, not folded into it.** `announced` grew to
+`1,563.7 m, 18.4 min, 3 steps, by a-star on the "Stay in the shade" preference (+46.0 m · +18 s).` — lower-casing
+the label into the prose made it read as a remark about the weather, and the live region is the only place a
+reader who never sees the caption learns which knob produced the number. Curly quotes because `renderToStaticMarkup`
+turns `"` into `&quot;`, and a test should not have to assert in entities.
+
+**No caption is not an error.** `profiles.find(…)` is left `undefined`-able and the control draws nothing: the
+alternative was a `throw` in a lookup (a missing sentence blanks the page) or a `??` back to the baseline row
+(a wrong explanation). The branch is reached by a test that renders the form with an empty row list, so the
+markup is exercised, not excused.
+
+**Tests, 20 of them.** `route-options.spec.ts` +3 (order, verbatim label and blurb, narrowing a longer order);
+`route-summary.spec.ts` +7 (the subtraction both signs, no comparison, tenths, `the same walk`, the
+same-walk-but-slower case, thousands, the live-region sentence with and without a preference);
+`route-card.spec.ts` +3 (five options with the engine's labels and the current one marked, the profile line with
+its price, and no line at all when the view has no preference) and the two existing option-count assertions
+updated rather than relaxed — 50 `<option>`s and four `selected` attributes now, counted from the same arrays the
+component maps over; `src/test/campus-routing.spec.ts` +1, the claim that makes the card's Δ honest on real
+geometry: over all 380 pairs and four preferences, × Dijkstra and A*, **a preference never saves a metre**
+(the subtraction written by hand in the test, not imported from the function under test), BFS's route and hop
+count are *identical* under every preference, and a counter asserts the preferences moved more than 380 of those
+routes so the sweep is not vacuous. New `src/test/cost-profiles.spec.ts` (5) reads the sources instead of
+rendering them: the UI's `ProfileName` literals equal `PROFILE_ORDER`, the control hard-codes none of the
+engine's labels, the select is labelled and there are exactly three selects in the file, the hook owns the second
+search, and the card's pace is `engine.walkingSpeedMps[result.profile]` rather than a number in a component.
+
+**Total: 533 tests in 31 files**, up from 513 in 30. Nothing deleted; the two option counts were *raised* with
+the reason in the comment. `route-controls.tsx` is now at 76.92 % statements with three uncovered `onChange`
+arrows (one per `<select>`) — a dispatched event needs a DOM and none will be added, and the sentence in
+`ARCHITECTURE.md` that said "two" says "three" now.
+
+**Checked live, not just statically.** The dev server serves every changed module (200 for `App.tsx`,
+`route-controls.tsx`, `route-card.tsx`, `useRoute.ts`, `routing/cost.ts`, `app.css`), and the served control
+module contains the `route-profile` markup — the picker's repaint on a click is the part only the preview can
+show, and it is stated as such rather than claimed.

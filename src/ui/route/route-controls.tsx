@@ -12,7 +12,7 @@
  */
 import { ArrowLeftRight } from 'lucide-react'
 import { ALGORITHM_CHOICES, algorithmChoice, pickerRows } from './route-options'
-import type { PlaceOption } from './route-options'
+import type { PlaceOption, ProfileChoice, ProfileName } from './route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
 
 export interface RouteControlsProps {
@@ -21,9 +21,15 @@ export interface RouteControlsProps {
   readonly from: string
   readonly to: string
   readonly algorithm: RouteAlgorithmChoice
+  /** The cost profile the route is priced under. */
+  readonly profile: ProfileName
+  /** The rows for the preference `<select>`, in the engine's order — built in `App` from the hook, because the
+   *  wording of a preference is the engine's fact about it and not this component's. */
+  readonly profiles: readonly ProfileChoice[]
   readonly onFrom: (id: string) => void
   readonly onTo: (id: string) => void
   readonly onAlgorithm: (algorithm: RouteAlgorithmChoice) => void
+  readonly onProfile: (profile: ProfileName) => void
   readonly onSwap: () => void
 }
 
@@ -66,12 +72,20 @@ export function RouteControls({
   from,
   to,
   algorithm,
+  profile,
+  profiles,
   onFrom,
   onTo,
   onAlgorithm,
+  onProfile,
   onSwap,
 }: RouteControlsProps) {
   const choice = algorithmChoice(algorithm)
+  // A `find` left optional rather than a lookup promised total, and no helper for it: if a row is ever missing the
+  // caption under the select is simply not drawn, the select still works, and nothing about the *answer* is wrong.
+  // A `throw` here would turn a missing sentence into a blank page, and a fallback to the baseline row would
+  // print an explanation of a preference the user did not pick.
+  const trade = profiles.find((row) => row.value === profile)
   const bothChosen = from !== '' && to !== ''
   return (
     <div className="route-form">
@@ -109,6 +123,26 @@ export function RouteControls({
           ))}
         </select>
       </div>
+      <div className="field">
+        <label className="field-caption" htmlFor="route-profile">
+          Preference
+        </label>
+        <select
+          id="route-profile"
+          className="picker"
+          value={profile}
+          onChange={(event) => onProfile(event.target.value as ProfileName)}
+        >
+          {profiles.map((row) => (
+            <option key={row.value} value={row.value}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* Two sentences, because two decisions: the preference says what the *route* is for, the algorithm says
+          how it is found. Merging them into one paragraph would be the shorter markup and the worse lesson. */}
+      {trade === undefined ? null : <p className="route-note">{trade.note}</p>}
       <p className="route-note">{choice.note}</p>
     </div>
   )

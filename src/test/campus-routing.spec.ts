@@ -216,3 +216,57 @@ describe('every search, over every pair of named places on the campus', () => {
     expect(found.steps.length).toBeLessThanOrEqual(found.nodeIds.length)
   })
 })
+
+describe('the cost profiles, on the campus rather than on a fixture', () => {
+  // The card's Δ is a subtraction of two searches the user did not both ask for, so the claims that make it
+  // meaningful are data claims and belong here: a preference is allowed to cost metres and never to *save* them,
+  // and a search that ignores length must be unmoved by a preference. Both are checked on all 380 pairs with the
+  // subtraction spelled out by hand, because a property test that imports the function under test has already
+  // lost the argument.
+  const preferences = ['shaded', 'lit', 'step-free', 'quiet'] as const
+
+  it('costs a preference in metres, and never pays for one', () => {
+    let pairs = 0
+    let routesThatMoved = 0
+    for (const from of points) {
+      for (const to of points) {
+        if (from.id === to.id) continue
+        pairs += 1
+        const where = `${from.label} to ${to.label}`
+        for (const algorithm of ['dijkstra', 'a-star'] as const) {
+          const search = algorithm === 'dijkstra' ? dijkstra : aStar
+          const baseline = route(search(index, from.id, to.id, { profile: 'shortest' }), `${where} baseline`)
+          for (const profile of preferences) {
+            const preferred = route(search(index, from.id, to.id, { profile }), `${where} ${profile}`)
+            const delta = Math.round((preferred.metres - baseline.metres) * 10) / 10
+            expect(
+              delta,
+              `${where}: ${profile} via ${algorithm} walked ${String(preferred.metres)} m against ${String(baseline.metres)} m`,
+            ).toBeGreaterThanOrEqual(0)
+            if (preferred.nodeIds.join('>') !== baseline.nodeIds.join('>')) routesThatMoved += 1
+          }
+        }
+
+        // BFS counts hops, so no factor in `routing/cost.ts` reaches its decision: same route, same length, same
+        // `cost` (which for BFS *is* the hop count). The card's `the same walk` is therefore a fact about the
+        // algorithm rather than a rounding accident — and the only thing a preference does to it is re-quote the
+        // minutes, because the pace changes with the profile.
+        const queueBaseline = route(bfs(index, from.id, to.id, { profile: 'shortest' }), `${where} bfs`)
+        for (const profile of preferences) {
+          const queue = route(bfs(index, from.id, to.id, { profile }), `${where} bfs ${profile}`)
+          expect(queue.nodeIds, `${where}: bfs under ${profile}`).toEqual(queueBaseline.nodeIds)
+          expect(queue.metres, `${where}: bfs length under ${profile}`).toBe(queueBaseline.metres)
+          expect(queue.cost, `${where}: bfs hops under ${profile}`).toBe(queueBaseline.cost)
+        }
+      }
+    }
+
+    expect(pairs).toBe(380)
+    // The other half of the claim. A sweep in which no preference ever changed a walk would pass every assertion
+    // above while testing nothing, so the count is asserted too: on this file, with six shaded walkways, three
+    // staircases and a crowd figure on every edge, the four preferences move *most* routes.
+    expect(routesThatMoved, 'a preference that never chose differently is a profile with no effect').toBeGreaterThan(
+      pairs,
+    )
+  })
+})

@@ -36,11 +36,18 @@ engine, because a decision that can be reasoned about can be tested.
 Since Phase 3 cp5 the list also holds three `.tsx` components — `route/route-card.tsx`,
 `route/route-controls.tsx` and `map/layers/route-layer.tsx` — because `react-dom/server` is already a
 dependency and `renderToStaticMarkup` needs no DOM: a component whose *output* is assertable is a
-component whose statements are measurable. Two of them are at 100 %; `route-controls.tsx` is at 77.77 %
-and stays in the list at that number, because its two uncovered lines are `onChange` arrows that only a
-*dispatched* event runs — the gap is the honest shape of what a Node-only harness can reach, and taking
+component whose statements are measurable. Two of them are at 100 %; `route-controls.tsx` is at 76.92 %
+and stays in the list at that number, because its three uncovered lines are `onChange` arrows — one per
+`<select>` — that only a *dispatched* event runs — the gap is the honest shape of what a Node-only harness can reach, and taking
 the file out of the report would hide that rather than say it. `src/test/route-styles.spec.ts` adds the
 check the markup cannot make: every class name the route UI emits has a rule in a stylesheet.
+
+Phase 4's preference selector followed the same shape rather than inventing one: `useEngineContract` hands
+the engine's profile table to `App`, `route-options.ts` narrows it to rows typed by the UI's own `ProfileName`
+union (so a sixth profile in `routing/cost.ts` is a compile error where a name has to be chosen), and the
+second search that makes a delta possible lives in `useRoute` — a component never asks for two routes, and the
+subtraction lives in `route-summary.ts` next to the formatters it has to agree with. `src/test/cost-profiles.spec.ts`
+is the guard that keeps the wording in the engine and out of the component, by reading the two files.
 
 What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts` and the
 map layers whose behaviour is `getBoundingClientRect`, `ResizeObserver` and focus — with the reason in

@@ -6,7 +6,9 @@ import { useRoute } from '@/hooks/useRoute'
 import { RouteCard } from '@/ui/route/route-card'
 import { RouteControls } from '@/ui/route/route-controls'
 import type { RouteView } from '@/ui/route/route-card'
-import { algorithmChoice, placeOptions, swapEndpoints } from '@/ui/route/route-options'
+import { DEFAULT_PROFILE, algorithmChoice, placeOptions, profileChoices, swapEndpoints } from '@/ui/route/route-options'
+import { profileDelta } from '@/ui/route/route-summary'
+import type { ProfileName } from '@/ui/route/route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
 import { MapView } from '@/ui/map/map-view'
 import '@/styles/app.css'
@@ -33,8 +35,15 @@ export default function App() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [algorithm, setAlgorithm] = useState<RouteAlgorithmChoice>('a-star')
-  const { result } = useRoute(model.graph, from, to, algorithm)
+  // The preference is state like the other three, and for the same reason: it belongs to the *request*, so the
+  // map line and the card must agree about which cost function drew them. `DEFAULT_PROFILE` is the engine's
+  // baseline, which is the one profile whose numbers need no explanation.
+  const [profile, setProfile] = useState<ProfileName>(DEFAULT_PROFILE)
+  const { result, baseline } = useRoute(model.graph, from, to, algorithm, profile)
   const labelOf = useMemo(() => new Map(model.nodes.map((node) => [node.id, node.label])), [model])
+  // The picker's rows are the engine's own labels and blurbs, narrowed to the UI's union — which is where a
+  // sixth profile in `routing/cost.ts` would stop compiling, in the file that has to give it a name.
+  const profiles = useMemo(() => profileChoices(engine.profiles, engine.profileOrder), [engine])
 
   // The engine's result, narrowed to what a card can draw. `direction` and `reason` keep their string values on
   // purpose: the view model declares the unions it needs, so this is where a new turn bucket or a new refusal
@@ -64,8 +73,19 @@ export default function App() {
         })),
       },
       paceMps: engine.walkingSpeedMps[result.profile],
+      profile: {
+        label: engine.profiles[result.profile].label,
+        // A baseline that refused, or that was never run, is no comparison — and `profileDelta` answers with
+        // `null` rather than with a zero, so the card prints no price rather than a misleading one.
+        delta: profileDelta(
+          { metres: result.metres, minutes: result.minutes },
+          baseline === null || !baseline.ok
+            ? null
+            : { metres: baseline.metres, minutes: baseline.minutes },
+        ),
+      },
     }
-  }, [result, engine])
+  }, [result, baseline, engine])
   const places = useMemo(() => placeOptions(model.nodes, model.edges), [model])
 
   // The map takes four strings and an id list; it never sees a `RouteResult`. Unwrapping the union is this
@@ -141,9 +161,12 @@ export default function App() {
               from={from}
               to={to}
               algorithm={algorithm}
+              profile={profile}
+              profiles={profiles}
               onFrom={setFrom}
               onTo={setTo}
               onAlgorithm={setAlgorithm}
+              onProfile={setProfile}
               onSwap={() => {
                 // One pair of updates, both from the previous values: two `setState` calls that read the state
                 // above them would swap `a → b` into `b → b`, because React hands each callback the value from

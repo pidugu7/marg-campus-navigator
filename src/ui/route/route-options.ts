@@ -114,3 +114,44 @@ export const ALGORITHM_CHOICES: readonly AlgorithmChoice[] = [
 export function algorithmChoice(value: RouteAlgorithmChoice): AlgorithmChoice {
   return CHOICE_BY_VALUE[value]
 }
+
+/**
+ * The five preferences, spelled out here rather than imported from `@/engine`.
+ *
+ * The same deliberate duplication as `route-summary.ts`'s `DirectionName` and `FailureView.reason`, for the same
+ * reason: what the UI holds must be *assignable from* the engine's union, so a sixth profile in
+ * `routing/cost.ts` — or a rename of one — stops compiling in `App.tsx` and in {@link profileChoices}, which are
+ * the two places that would have to decide what the new preference is called on screen. The failure mode this
+ * prevents is a `<select>` that silently omits an option, which no amount of clicking would report.
+ */
+export type ProfileName = 'shortest' | 'shaded' | 'lit' | 'step-free' | 'quiet'
+
+/** What the app assumes before the user says otherwise: the objective the map's own lengths describe. */
+export const DEFAULT_PROFILE: ProfileName = 'shortest'
+
+export interface ProfileChoice {
+  readonly value: ProfileName
+  /** For the `<option>`. */
+  readonly label: string
+  /** One line under the select — what this preference chases, and what it accepts. */
+  readonly note: string
+}
+
+/** A profile-shaped slice of the engine's table. The hook hands over the whole record; this needs two strings. */
+interface ProfileWords {
+  readonly label: string
+  readonly blurb: string
+}
+
+/**
+ * The rows for the preference `<select>`, in the engine's own order (`PROFILE_ORDER`: baseline first, then the
+ * four trades). Typing `table` by the UI's union is what makes the assignment a check rather than a copy.
+ */
+export function profileChoices(
+  table: Record<ProfileName, ProfileWords>,
+  order: readonly ProfileName[],
+): ProfileChoice[] {
+  return order.map((value) => ({ value, label: table[value].label, note: table[value].blurb }))
+}
+
+

@@ -17,12 +17,34 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { RouteCard } from './route-card'
 import { RouteControls } from './route-controls'
-import { ALGORITHM_CHOICES, placeOptions } from './route-options'
+import { ALGORITHM_CHOICES, placeOptions, profileChoices } from './route-options'
+import type { ProfileChoice } from './route-options'
 import { buildGraph, campus } from '@/data'
 import type { RouteView } from './route-card'
 import type { RoutableView } from './route-summary'
 
-const found = (overrides: Partial<RoutableView> = {}): RouteView => ({
+/**
+ * The picker's rows, built by the function the app builds them with — over a *literal* table rather than the
+ * engine's, because `src/ui` may not import `@/engine` and a spec that did would pass while the app could not
+ * build. The table's shape is what `Record<ProfileName, ProfileWords>` demands, so the fixture cannot drift into
+ * a shape the component would never receive.
+ */
+const PROFILE_ROWS: readonly ProfileChoice[] = profileChoices(
+  {
+    shortest: { label: 'Shortest walk', blurb: 'The fewest metres, whatever they are paved with.' },
+    shaded: { label: 'Stay in the shade', blurb: 'Prefers covered and tree-shaded walkways.' },
+    lit: { label: 'Stay on lit routes', blurb: 'Prefers lit walkways at night.' },
+    'step-free': { label: 'Step-free', blurb: 'Prices stairs at twelve times their length.' },
+    quiet: { label: 'Quietest route', blurb: 'Chases the crowd out of the cost.' },
+  },
+  ['shortest', 'shaded', 'lit', 'step-free', 'quiet'],
+)
+
+/** The found branch, not the union: a test that adds a `profile` line has to spread a *found* view, and
+ * spreading the union would let the `missing` branch's shape into an object that claims otherwise. */
+type FoundView = Extract<RouteView, { state: 'found' }>
+
+const found = (overrides: Partial<RoutableView> = {}): FoundView => ({
   state: 'found',
   paceMps: 1.4,
   route: {
@@ -59,9 +81,12 @@ describe('the route form', () => {
         from,
         to,
         algorithm: algorithm as 'a-star' | 'dijkstra' | 'bfs',
+        profile: 'shaded' as const,
+        profiles: PROFILE_ROWS,
         onFrom: () => {},
         onTo: () => {},
         onAlgorithm: () => {},
+        onProfile: () => {},
         onSwap: () => {},
       }),
     )
@@ -69,8 +94,12 @@ describe('the route form', () => {
 
   it('lists every named place, and no junctions, in both pickers', () => {
     const html = form('library', 'gate-north')
-    // Both pickers (one blank row each) plus the three algorithm rows: 45 `<option>`s for a 20-place campus.
-    expect(html.match(/<option/g)).toHaveLength((options.length + 1) * 2 + ALGORITHM_CHOICES.length)
+    // Both pickers (one blank row each) plus the three algorithm rows and the five preferences: 50
+    // `<option>`s for a 20-place campus. Counted from the same arrays the component maps over, so a sixth
+    // profile changes this line rather than making it agree with itself.
+    expect(html.match(/<option/g)).toHaveLength(
+      (options.length + 1) * 2 + ALGORITHM_CHOICES.length + PROFILE_ROWS.length,
+    )
     expect(html).toContain('>Central Library<')
     expect(html).toContain('North Gate (gate)')
     expect(html).not.toContain('>acad c<')
@@ -83,9 +112,95 @@ describe('the route form', () => {
     const html = form('library', 'gate-north')
     expect(html.match(/<option value="library" selected/g)).toHaveLength(1)
     expect(html.match(/<option value="gate-north" selected/g)).toHaveLength(1)
-    // Three and not two, because the algorithm row marks its own selection the same way — `selected=""` in the
-    // markup, which is React's answer to a boolean attribute rather than a thing this component controls.
-    expect(html.match(/ selected/g)).toHaveLength(3)
+    // Four and not two: the two place pickers, the algorithm and the preference all mark their own selection the
+    // same way — `selected=""` in the markup, which is React's answer to a boolean attribute rather than a thing
+    // this component controls. A profile select that did not carry the current choice would render a form whose
+    // select and whose numbers disagree, and this count is the cheap way to notice.
+    expect(html.match(/ selected/g)).toHaveLength(4)
+  })
+
+  it('lists every preference, marks the one in use, and prints what it trades', () => {
+    const html = form('library', 'gate-north')
+    for (const row of PROFILE_ROWS) {
+      // Split in two, because React writes `selected=""` into the option that is current and an assertion about
+      // the whole tag would only be true of the four rows nobody chose.
+      expect(html, `${row.value} is selectable`).toContain(`<option value="${row.value}"`)
+      expect(html, `${row.value} is labelled`).toContain(`>${row.label}</option>`)
+    }
+    expect(html).toContain('<option value="shaded" selected')
+    // The note is the engine's sentence about the profile, verbatim — the form does not paraphrase a trade-off.
+    expect(html).toContain('Prefers covered and tree-shaded walkways.')
+    // A select needs a label a keyboard user can reach; `htmlFor` is how the two place pickers do it too.
+    expect(html).toContain('for="route-profile"')
+    expect(html).toContain('>Preference<')
+  })
+
+  it('names the preference and its price, and says so in one line', () => {
+    const html = renderToStaticMarkup(
+      createElement(RouteCard, {
+        fromLabel: 'Research Labs',
+        toLabel: 'Hostel Block 2',
+        view: {
+          ...found(),
+          profile: { label: 'Stay in the shade', delta: { metres: 46, minutes: 0.3 } },
+        },
+      }),
+    )
+    expect(html).toContain('class="route-profile"')
+    expect(html).toContain('>Stay in the shade<')
+    // Distances come out of `formatMetres`, which always shows the tenth, so a Δ reads `+46.0 m` and not `+46 m`
+    // — the same rule the figure above it obeys, which is the point of routing a difference through it.
+    expect(html).toContain('+46.0 m')
+    // …and a time difference below a minute reads as seconds, because it goes through `formatMinutes`, which is
+    // the rule the duration beside it obeys. "0.3 min" and "18 s" are the same claim; only one of them is a
+    // sentence a person can use.
+    expect(html).toContain('+18 s')
+    expect(html).toContain('vs shortest')
+    // …and the live region says the same thing, so a reader who never sees the caption is not missing the fact
+    // that these numbers are not the shortest walk.
+    expect(html).toContain('on the “Stay in the shade” preference (+46.0 m · +18 s).')
+  })
+
+  it('draws no price when the preference is the baseline, and no line when there is no preference', () => {
+    const baseline = renderToStaticMarkup(
+      createElement(RouteCard, {
+        fromLabel: 'a',
+        toLabel: 'b',
+        view: { ...found(), profile: { label: 'Shortest walk', delta: null } },
+      }),
+    )
+    expect(baseline).toContain('>Shortest walk<')
+    expect(baseline).not.toContain('vs shortest')
+    expect(baseline).not.toContain('route-delta')
+    const bare = renderToStaticMarkup(createElement(RouteCard, { fromLabel: 'a', toLabel: 'b', view: found() }))
+    expect(bare).not.toContain('route-profile')
+    expect(bare).toContain('steps, by a-star.')
+  })
+
+  it('draws no caption when the rows are missing, and keeps the select working', () => {
+    // The `undefined` arm of `profiles.find(…)` is not a hypothetical branch to be covered for its own sake: it
+    // is what the form does when the engine and the UI disagree. No caption, no crash, and the select is still
+    // there with its rows — the *choice* is intact, only the explanation is gone.
+    const html = renderToStaticMarkup(
+      createElement(RouteControls, {
+        options,
+        from: 'library',
+        to: 'gate-north',
+        algorithm: 'a-star',
+        profile: 'shaded',
+        profiles: [],
+        onFrom: () => {},
+        onTo: () => {},
+        onAlgorithm: () => {},
+        onProfile: () => {},
+        onSwap: () => {},
+      }),
+    )
+    expect(html).toContain('id="route-profile"')
+    // The *algorithm's* caption survives — it is looked up in a record the component builds itself — and only the
+    // preference's is gone. Counting the class rather than looking for its absence is what says so.
+    expect(html.match(/class="route-note"/g)).toHaveLength(1)
+    expect(html).not.toContain('Prefers covered')
   })
 
   it('greys out a place no walkway reaches, but never the one already picked', () => {
@@ -99,9 +214,12 @@ describe('the route form', () => {
         from: '',
         to: 'library',
         algorithm: 'bfs',
+        profile: 'lit' as const,
+        profiles: PROFILE_ROWS,
         onFrom: () => {},
         onTo: () => {},
         onAlgorithm: () => {},
+        onProfile: () => {},
         onSwap: () => {},
       }),
     )

@@ -6,7 +6,15 @@
  * and assertable. A component test would need a renderer, and the project has no jsdom and will not add one.
  */
 import { describe, expect, it } from 'vitest'
-import { ALGORITHM_CHOICES, algorithmChoice, pickerRows, placeOptions, swapEndpoints } from './route-options'
+import {
+  ALGORITHM_CHOICES,
+  DEFAULT_PROFILE,
+  algorithmChoice,
+  pickerRows,
+  placeOptions,
+  profileChoices,
+  swapEndpoints,
+} from './route-options'
 import type { GraphEdge, GraphNode, NodeId, NodeKind } from '@/data'
 
 function node(id: string, kind: NodeKind = 'place', label = id): GraphNode {
@@ -147,5 +155,41 @@ describe('the algorithm dropdown', () => {
       // edited without the other.
       expect(algorithmChoice(choice.value)).toBe(choice)
     }
+  })
+})
+
+describe('profileChoices', () => {
+  const table = {
+    shortest: { label: 'Shortest walk', blurb: 'The fewest metres.' },
+    shaded: { label: 'Stay in the shade', blurb: 'Prefers shade.' },
+    lit: { label: 'Stay on lit routes', blurb: 'Prefers lamps.' },
+    'step-free': { label: 'Step-free', blurb: 'Prices stairs at twelve times.' },
+    quiet: { label: 'Quietest route', blurb: 'Charges the crowd.' },
+  } as const
+
+  it('keeps the order it is given, and starts where the app starts', () => {
+    const order = ['shortest', 'shaded', 'lit', 'step-free', 'quiet'] as const
+    const rows = profileChoices(table, order)
+    expect(rows.map((row) => row.value)).toEqual([...order])
+    // The baseline first, because a reader who wants the plain answer should not have to hunt for the option
+    // that produces it — and because `DEFAULT_PROFILE` is what the app holds before any choice is made.
+    expect(rows[0]?.value).toBe(DEFAULT_PROFILE)
+    expect(DEFAULT_PROFILE).toBe('shortest')
+  })
+
+  it('copies the label and the sentence without editing either', () => {
+    const rows = profileChoices(table, ['shortest', 'shaded', 'lit', 'step-free', 'quiet'])
+    for (const row of rows) {
+      expect(row.label).toBe(table[row.value].label)
+      // The blurb is the engine's own sentence about the trade. A picker that shortened it for space would be
+      // free to change its meaning, and the sentence is the part that tells a user what they are accepting.
+      expect(row.note).toBe(table[row.value].blurb)
+    }
+  })
+
+  it('narrows a longer order to the rows the UI has names for, and no further', () => {
+    // `readonly ProfileName[]` is the whole of the safety here: the caller in `App.tsx` hands over the engine's
+    // `PROFILE_ORDER`, and `tsc` is what proves the two unions still mean the same five things.
+    expect(profileChoices(table, ['quiet'])).toEqual([{ value: 'quiet', label: 'Quietest route', note: 'Charges the crowd.' }])
   })
 })

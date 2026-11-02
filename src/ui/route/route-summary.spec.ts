@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_ROUTE_COPY,
   describeFailure,
+  formatDelta,
   formatMetres,
   formatMinutes,
+  profileDelta,
   summarise,
   turnRotation,
   type DirectionName,
@@ -192,5 +194,75 @@ describe('the empty state', () => {
     // No exclamation, no "error", no "failed": nothing has gone wrong yet.
     expect(EMPTY_ROUTE_COPY.headline + EMPTY_ROUTE_COPY.detail).not.toMatch(/error|fail|invalid|unable/i)
     expect(EMPTY_ROUTE_COPY.detail).toContain('walkway')
+  })
+})
+
+describe('the preference line', () => {
+  const shortest = { metres: 1517.7, minutes: 18.1 }
+
+  it('subtracts the same question asked with no preference', () => {
+    expect(profileDelta({ metres: 1563.7, minutes: 18.4 }, shortest)).toEqual({ metres: 46, minutes: 0.3 })
+    // A preference can buy a *shorter* time even when it costs metres, because the pace changes with the
+    // profile: 1.05 m/s over fewer metres can beat 1.4 m/s over more. So a Δ is signed, not absolute.
+    expect(profileDelta({ metres: 1600, minutes: 17.9 }, shortest)).toEqual({ metres: 82.3, minutes: -0.2 })
+  })
+
+  it('says nothing when there is nothing to compare', () => {
+    expect(profileDelta(shortest, null)).toBe(null)
+    expect(formatDelta(null)).toBe('')
+  })
+
+  it('rounds through tenths, so 18.4 minus 18.1 is 0.3 and not 0.30000000000000004', () => {
+    // `minutes` reaches the card already rounded to a tenth, and subtracting two of them in binary floating
+    // point leaves the residue in the title. The raw metres are no better: 1 567.75 minus 1 517.7 is
+    // 50.04999999999995. Rounding once, here, is what keeps the Δ on the same tenth the two numbers beside it
+    // are printed on.
+    expect(profileDelta({ metres: 1567.75, minutes: 18.4 }, shortest)).toEqual({ metres: 50, minutes: 0.3 })
+    expect(formatDelta({ metres: 0.1, minutes: 0.1 })).toBe('+0.1 m · +6 s')
+  })
+
+  it('calls a difference of nothing nothing, rather than +0.0 m', () => {
+    // The arm the rounding exists for: a preference can leave the *displayed* length alone while the raw sums
+    // differ in the eighth decimal, and a caption reading "+0.0 m" would be quoting an arithmetic residue
+    // instead of the fact, which is that the walk did not change.
+    const near = { metres: 1517.7 + 1e-7, minutes: 18.1 }
+    expect(profileDelta(near, shortest)).toEqual({ metres: 0, minutes: 0 })
+    expect(formatDelta(profileDelta(near, shortest))).toBe('the same walk')
+  })
+
+  it('names the cases where a preference changed the price and not the walk', () => {
+    expect(formatDelta({ metres: 0, minutes: 0 })).toBe('the same walk')
+    // The BFS case, and worth a string of its own: BFS counts hops, so no preference can move its route, while
+    // the pace *does* change the minutes it is quoted at. "the same walk, +0.3 min" is the honest sentence, and
+    // a flat "+0 m" would read as a bug in the search.
+    expect(formatDelta({ metres: 0, minutes: 0.3 })).toBe('same walk · +18 s')
+    expect(formatDelta({ metres: -46, minutes: 0 })).toBe('−46.0 m')
+  })
+
+  it('quotes a Δ through the same formatters as the numbers beside it', () => {
+    // 1 246 m of difference groups its thousands the same way the distance does, and a difference under a
+    // minute reads as seconds the same way the duration does — while 3.5 min stays 3.5 min, because that is what
+    // the figure above it does with the same number.
+    expect(formatDelta({ metres: 1246, minutes: 3.5 })).toBe('+1,246.0 m · +3.5 min')
+  })
+
+  it('adds the preference to the sentence the live region reads', () => {
+    const plain = summarise(route(), 1.4)
+    expect(plain.announced).toBe('1,517.7 m, 18.1 min, 3 steps, by a-star.')
+    expect(plain.profile).toBe('')
+    expect(plain.delta).toBe('')
+    const shaded = summarise(route({ metres: 1563.7, minutes: 18.4 }), 1.3, {
+      label: 'Stay in the shade',
+      delta: { metres: 46, minutes: 0.3 },
+    })
+    expect(shaded.profile).toBe('Stay in the shade')
+    expect(shaded.delta).toBe('+46.0 m · +18 s')
+    expect(shaded.announced).toBe(
+      '1,563.7 m, 18.4 min, 3 steps, by a-star on the “Stay in the shade” preference (+46.0 m · +18 s).',
+    )
+    // …and the baseline profile has a name but no price, which is the absence the card renders as one line.
+    const bare = summarise(route(), 1.4, { label: 'Shortest walk', delta: null })
+    expect(bare.delta).toBe('')
+    expect(bare.announced).toBe('1,517.7 m, 18.1 min, 3 steps, by a-star on the “Shortest walk” preference.')
   })
 })

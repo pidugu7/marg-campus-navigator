@@ -91,6 +91,60 @@ export interface FailureView {
   readonly explored: number
 }
 
+/** The two numbers a preference is judged on. Narrower than `RoutableView` on purpose: a Δ is about length and
+ *  pace, and a function that can see the step list is a function that will eventually be given an opinion. */
+export interface RouteLength {
+  readonly metres: number
+  readonly minutes: number
+}
+
+/** What a preference cost, against the same question asked with none. */
+export interface ProfileDelta {
+  /** Metres further than the `shortest` walk. Never negative for a search that minimises metres — the claim
+   *  `src/test/campus-routing.spec.ts` checks on all 380 place pairs. */
+  readonly metres: number
+  /** Minutes more than the `shortest` walk, at that profile's own pace. Can go either way: a shorter route
+   *  walked at 1.05 m/s is not automatically slower than a longer one at 1.4. */
+  readonly minutes: number
+}
+
+/** Both totals rounded *through* tenths, so `18.1 − 17.8` is `0.3` and not `0.30000000000000004`. */
+function tenths(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+/**
+ * The cost of a preference, or `null` when the comparison is with itself.
+ *
+ * `baseline === null` is the `shortest` profile's own answer, and the card prints no Δ for it: "0 m against
+ * itself" is noise, and the absence is the fact.
+ */
+export function profileDelta(route: RouteLength, baseline: RouteLength | null): ProfileDelta | null {
+  if (baseline === null) return null
+  return { metres: tenths(route.metres - baseline.metres), minutes: tenths(route.minutes - baseline.minutes) }
+}
+
+/** One signed part, or nothing when that part did not move. */
+function signed(value: number, format: (magnitude: number) => string): string {
+  if (value === 0) return ''
+  return `${value > 0 ? '+' : '−'}${format(Math.abs(value))}`
+}
+
+/**
+ * The Δ as a caption: `+46 m · +0.3 min`. Empty for a route with nothing to compare against, and a plain
+ * `the same walk` when the preference changed the price of the route and not the route — which is what BFS
+ * answers for every profile, because BFS counts hops.
+ */
+export function formatDelta(delta: ProfileDelta | null): string {
+  if (delta === null) return ''
+  const metres = signed(delta.metres, formatMetres)
+  const minutes = signed(delta.minutes, formatMinutes)
+  if (metres === '' && minutes === '') return 'the same walk'
+  if (metres === '') return `same walk · ${minutes}`
+  if (minutes === '') return metres
+  return `${metres} · ${minutes}`
+}
+
 export interface SummaryRow {
   readonly label: string
   readonly value: string
@@ -102,6 +156,10 @@ export interface RouteSummary {
   readonly duration: string
   /** The pace the duration was computed at, as the engine declares it. */
   readonly pace: string
+  /** Which preference produced this, as the engine words it. `''` when the caller had no preference to show. */
+  readonly profile: string
+  /** The Δ against the same query with no preference, `''` when there is none to quote. */
+  readonly delta: string
   readonly rows: readonly SummaryRow[]
   readonly steps: readonly StepView[]
   /** One clause for the pane's status line, so a screen reader gets the finding and not only the list. */
@@ -137,17 +195,44 @@ export function formatMinutes(minutes: number): string {
  * the path crosses, and how many sentences the directions come to after the fold — and a learner who sees 6
  * and 4 side by side has already asked the right question about `simplifyLegs`.
  */
-export function summarise(route: RoutableView, paceMps: number): RouteSummary {
+/** The preference line, if there is one to write: `Shaded walk`, plus the price of it when one was paid. */
+export interface ProfileLine {
+  readonly label: string
+  readonly delta: ProfileDelta | null
+}
+
+export function summarise(route: RoutableView, paceMps: number, profile?: ProfileLine): RouteSummary {
   // A turn is a step that is not the opening heading and not a standstill. Counted from `direction`, not by
   // sniffing the sentence: `instruction` is the wording half, and a rule that reads prose to recover a fact the
   // leg already carries breaks the first time somebody improves a sentence.
   const turns = route.steps.filter((step) => step.direction !== 'straight' && step.direction !== 'stay')
+  const distance = formatMetres(route.metres)
+  const duration = formatMinutes(route.minutes)
+  const change = formatDelta(profile?.delta ?? null)
+  // The sentence a screen reader gets when the answer changes: the numbers, the method, and the preference
+  // that priced them. Built from parts rather than one template with commas in it, because "by a-star, ." is
+  // what a template produces when there is no preference to name, and a live region is not where that is fine.
+  const announced = [
+    `${distance}, ${duration}, ${String(route.steps.length)} steps, by ${route.algorithm}`,
+    // The label quoted rather than lower-cased into the sentence: "on the stay in the shade" reads like a
+    // description of the weather, and this string is the whole of what a screen reader learns about the knob
+    // that produced the number.
+    // Curly quotes rather than `"`: `renderToStaticMarkup` escapes the ASCII pair into `&quot;`, so a sentence
+    // built from one is a sentence a test has to assert in entities. The label is quoted rather than folded into
+    // the prose, because "on the stay in the shade" reads like a remark about the weather — and this string is
+    // the whole of what a screen reader learns about the knob that produced the number.
+    profile === undefined ? '' : `on the “${profile.label}” preference`,
+    change === '' ? '' : `(${change})`,
+  ]
+    .filter((part) => part !== '')
+    .join(' ')
+    .concat('.')
   return {
     // No pair of place names in here: the card prints the two labels it is given, each in its own element, so
     // the summary would only be able to offer them joined — a string the component has to split again to style
     // is a string nobody should have built. The place names never enter this file at all.
-    distance: formatMetres(route.metres),
-    duration: formatMinutes(route.minutes),
+    distance,
+    duration,
     pace: `${paceMps} m/s`,
     rows: [
       { label: 'algorithm', value: route.algorithm },
@@ -159,7 +244,9 @@ export function summarise(route: RoutableView, paceMps: number): RouteSummary {
       { label: 'turns to make', value: String(turns.length) },
     ],
     steps: route.steps,
-    announced: `${formatMetres(route.metres)}, ${formatMinutes(route.minutes)}, ${String(route.steps.length)} steps, by ${route.algorithm}.`,
+    profile: profile?.label ?? '',
+    delta: change,
+    announced,
   }
 }
 

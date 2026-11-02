@@ -565,9 +565,14 @@ the searches *resembling each other*, which no single algorithm's own file can m
 **The idea.** One graph, five opinions about what "best" means. A profile is not a search and not a filter: it
 is a function `EdgeAttributes → number` that multiplies an edge's metres, and the searches never learn why a
 walkway costs what it costs. `costFor('shaded')` returns `(edge) => edge.metres * 0.85 or 1.25`; `dijkstra`
-and A\* then minimise that number and never see a shade flag. This is what makes Phase 4's selector a set of
+and A\* then minimise that number and never see a shade flag. This is what made the selector a set of
 `<option>` elements rather than a rewrite: the graph is built once (Phase 2), sealed, frozen, and shared, and
-switching profiles between two searches costs nothing because no weight is ever stored on an edge.
+switching profiles between two searches costs nothing because no weight is ever stored on an edge. What the
+screen does with it is `ui/route/`'s half — a `<select>` whose rows are the labels and sentences below, and a
+result card that names the profile and prints the price of it, `+46.0 m · +18 s vs shortest`, measured against
+the same query run with `shortest` on the same algorithm. That second search is run by `useRoute`, not by the
+component, and Phase 4's cache is what makes it close to free: the pair differs in one key, so flipping from
+shade to lamps re-runs one search and reads the other.
 
 | profile | reads | factor | min | max | what it is chasing |
 | --- | --- | --- | --- | --- | --- |

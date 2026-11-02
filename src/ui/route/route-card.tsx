@@ -11,7 +11,7 @@
  */
 import { ArrowUp, Footprints, TriangleAlert } from 'lucide-react'
 import { EMPTY_ROUTE_COPY, describeFailure, formatMetres, summarise, turnRotation } from './route-summary'
-import type { FailureView, RoutableView } from './route-summary'
+import type { FailureView, ProfileLine, RoutableView } from './route-summary'
 
 /**
  * What the card draws: nothing yet, a walk, or a refusal. `null` is the first and not an error.
@@ -21,7 +21,17 @@ import type { FailureView, RoutableView } from './route-summary'
  * that only means something in one of three branches is a prop that has to be lied about in the other two.
  */
 export type RouteView =
-  | { readonly state: 'found'; readonly route: RoutableView; readonly paceMps: number }
+  | {
+      readonly state: 'found'
+      readonly route: RoutableView
+      readonly paceMps: number
+      /**
+       * Which preference priced this, and what it cost against the same query with none. Absent when the UI has
+       * no preference to report — the baseline profile, or a card built by a test — and the line is then not
+       * drawn at all rather than drawn with a zero in it.
+       */
+      readonly profile?: ProfileLine
+    }
   | { readonly state: 'missing'; readonly failure: FailureView }
 
 export interface RouteCardProps {
@@ -53,7 +63,9 @@ export function RouteCard({ fromLabel, toLabel, view }: RouteCardProps) {
     )
   }
 
-  const summary = summarise(view.route, view.paceMps)
+  // The preference travels into `summarise` rather than being printed straight from the view: the label and the
+  // Δ need the same rounding rules as the distance and the duration, and they belong in the file that owns them.
+  const summary = summarise(view.route, view.paceMps, view.profile)
   return (
     <div className="route-card">
       <p className="route-pair">
@@ -73,8 +85,28 @@ export function RouteCard({ fromLabel, toLabel, view }: RouteCardProps) {
         <span className="route-pace">at {summary.pace}</span>
       </p>
 
+      {/* The preference and its price, in the card rather than only in the `<select>` above: a route is a
+          function of both knobs, and a reader who scrolls back up to check which one they chose has been asked
+          to do the app's work. `aria-hidden` on the separator, and the Δ folded into the live region's sentence
+          below, so nothing is announced twice. */}
+      {summary.profile === '' ? null : (
+        <p className="route-profile">
+          <span className="route-profile-name">{summary.profile}</span>
+          {summary.delta === '' ? null : (
+            <>
+              <span className="route-figure-sep" aria-hidden="true">
+                ·
+              </span>
+              <span className="route-delta">{`${summary.delta} vs shortest`}</span>
+            </>
+          )}
+        </p>
+      )}
+
       {/* Visible, not `sr-only`: in a course project the sentence is the lesson — the number of steps is the
           output of the directions pass, and hiding it would make the pane's most interesting count invisible. */}
+      {/* The card's own arithmetic lives in `route-summary.ts`; the only thing this file decides about the
+          preference line is whether there is one to show. */}
       <p className="route-status" aria-live="polite">
         {summary.announced}
       </p>

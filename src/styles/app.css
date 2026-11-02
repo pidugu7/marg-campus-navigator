@@ -363,6 +363,29 @@ body {
   color: var(--ink-soft);
 }
 
+/* The preference line: which trade produced these numbers, and what it cost. Same size as the status sentence
+   it sits above, deliberately — this is a footnote about the answer, not a second headline. */
+.route-profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.route-profile-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-delta {
+  /* Tabular figures, so the Δ of two searches lines up when the card repaints on every keystroke of a picker. */
+  font-variant-numeric: tabular-nums;
+}
+
 .route-metrics {
   display: grid;
   grid-template-columns: 1fr auto;
