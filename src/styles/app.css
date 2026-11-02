@@ -651,11 +651,13 @@ body {
 }
 
 @media (max-width: 380px) {
-  /* Touch targets first: at 360 px the five buttons are the part a thumb misses, and the caption is the part a
-     reader can afford to lose a pixel of. */
+  /* Touch targets first, and by a number rather than by feel: 32×32 CSS px is comfortably over the 24×24 floor
+     in WCAG 2.5.8, the five of them still fit one row at 360 px with the slider wrapped below, and the caption
+     is the part a reader can afford to lose a pixel of. On a pointer the base 26 px stays, because a row that
+     grows on a desktop is a row that pushes the map down for no reason. */
   .replay-button {
-    width: 30px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
   }
 
   .replay-caption {

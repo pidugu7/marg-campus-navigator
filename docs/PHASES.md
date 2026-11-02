@@ -877,4 +877,4 @@ distinguishable at 360, the current-vertex ring reads at the smallest size, and 
 frame. Two notes, so the proof is not oversold: librsvg ignores `var()` and `vector-effect`, so the first run
 came back with no stroke at all and needed the tokens substituted by hand — a harness limitation, not an app
 bug; and the HTML panel cannot be rasterised here, so its narrow layout rests on the stylesheet rules (26→30 px
-buttons under 380 px, flex-wrapped row) and on the preview, which is open.
+buttons at 32 px under 380 px, flex-wrapped row) and on the preview, which is open.
