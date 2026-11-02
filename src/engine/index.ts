@@ -127,3 +127,19 @@ export {
   factorFor,
   type ProfileDefinition,
 } from './routing/cost'
+export {
+  NO_BLOCKED_EDGES,
+  ROUTE_CACHE_CAPACITY,
+  RouteCache,
+  blockedSetHash,
+  cachedSearch,
+  canonicalBlockedIds,
+  clearRouteCache,
+  entryAccepts,
+  routeCacheFor,
+  routeCacheKey,
+  routeCacheView,
+  type RouteCacheEntry,
+  type RouteCacheView,
+  type RouteQuery,
+} from './algorithms/cache'

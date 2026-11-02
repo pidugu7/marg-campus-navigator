@@ -493,7 +493,9 @@ statements and branches** on their first run — `dijkstra.ts`, `measure.ts`, `p
 333 / 355 / 392 when the policy table grew the file; `ALGORITHMS.md` §8 now records the new ones and says why).
 On `campus.json`, all 380 ordered pairs of named places: 0 refusals, A* settles strictly fewer vertices on 374
 pairs and ties on 6 (3 043 settlements total against Dijkstra's 8 605 — 8.0 per query against 22.6, on a map of
-39), BFS's routes are 5 042.7 m longer in aggregate, depth-first's 291 146.1 m longer, and the longest route on
+39), BFS's routes are 5 042.7 m longer in aggregate (a sum over the 380 pairs — the maximum single overshoot is
+257.7 m and the mean 13.3 m; over all 1 482 node pairs the total is 20 201.2 m, max 257.7 m, mean 13.6 m, and cp4
+pins all ten figures per scope), depth-first's 291 146.1 m longer in the same aggregate sense, and the longest route on
 campus is 1 517.7 m (`Research Labs → Hostel Block 2`).
 
 **Test support that is now shared, and why.** `__tests__/helpers.ts` gained `sweepGraphs` (the seeded 200-graph
@@ -947,3 +949,130 @@ where A* and Dijkstra walk identical corridors: three separable lanes at every w
 its own, none occluding another. As before, the harness needs the CSS custom properties substituted (librsvg has
 none) — a harness limit, stated; and the HTML table cannot be rasterised here, so its 360 px layout rests on the
 `overflow-x` rules, the `tabindex=0` region and the live preview.
+
+### Phase 4, checkpoint 5 — the route cache, the benchmark, and a figure that had to be reconciled
+
+**Done.** The cache Phase 1 built a structure for now has a caller, `npm run bench` exists, and PR #2 covers
+Phases 1 to 4.
+
+**Both blocking items were already satisfied, and the answer is a file and a test name rather than a change.**
+
+1. An edge shorter than the straight line between its endpoints **is** an error. `src/data/build-graph.ts:552-560`
+   computes `derived - metres > slack` with `slack = max(CROW_FLIGHT_SLACK_METRES, √2 / pixelsPerMetre)`
+   (`:154`) and calls `error(index, 'shorter-than-crow-flight', …)` — not `warn`. The severity is pinned twice
+   over: `src/data/build-graph.spec.ts:320` *refuses a length shorter than the straight line between the
+   endpoints* asserts `toEqual(['shorter-than-crow-flight'])` and quotes the message, and
+   `src/test/schema-drift.spec.ts:60` pins `'shorter-than-crow-flight': 'error'` in the 25-code severity matrix,
+   so moving it to `warning` fails a test that has nothing else to do with the message. The two neighbouring
+   specs — *allows a shortfall the drawing itself could not resolve* (`:340`) and *measures that band in ground
+   metres, so a coarse scale buys more slack* (`:347`) — are why the rule is a band and not an equality. Nothing
+   was added, because the requirement was met before it was asked, which is worth recording as the outcome and
+   not as a saving.
+2. The engine's own scans read `src/engine/__tests__` because `src/test/architecture.test.ts:299` (*keeps every
+   file under src/engine/__tests__ in scope for the no-network and no-globals scans*) asserts it directly: it
+   filters the walked file list to that directory and requires each file to be present in the scan, with
+   `:290` (*widens the framework exemption to the engine's test directory, and no further*) failing out loud if
+   `helpers.ts` disappears from the list at all. The pair is deliberate — one test says "still read", the other
+   says "the exemption does not leak".
+
+**The figure that was wrong in a report, and the test that now owns it.** "BFS's routes are 5 042.7 m longer" is
+a **total over the 380 ordered place pairs**, first printed in the Phase 3 measured-results table; cp4's chat
+report reused it as a maximum ("up to 5 042.7 m"), which it never was. Both scopes, in all three shapes, are now
+asserted together in one test — `src/test/compare-campus.spec.ts`, *states the breadth-first overshoot in all
+three shapes, per scope* — and the numbers are: 380 place pairs, maximum **257.7 m** (`cafeteria → sports-ground`),
+total **5 042.7 m**, mean **13.3 m**, non-zero on 71 pairs; all 1 482 node pairs, same maximum **257.7 m**, total
+**20 201.2 m**, mean **13.6 m**, non-zero on 297. `docs/ALGORITHMS.md` §13 and the measured-results table state
+the scope next to every figure, and the Phase 3 log line above was amended rather than rewritten so the original
+claim stays readable with its denominator attached. A figure without its pair set is not a measurement, and this
+one cost a review comment to learn that.
+
+**The cache.** `src/engine/algorithms/cache.ts` owns the key, the entries and the counters; `runSearch` in
+`src/hooks/useRoute.ts` is the one place that consults it, so `useCompare` and the baseline inherited caching
+without acquiring any cache code. The key walks every field of `RouteSearchOptions` in sorted order — a sixth
+option cannot be forgotten by an author who never mentioned it — and returns `null` for a function-valued option,
+which means "do not cache this" rather than "cache it under a coarser key". A `WeakMap` from `GraphIndex` to
+`RouteCache` is the whole invalidation story: a new graph is a new cache, so there is no effect to forget, and
+`clearRouteCache` exists for the button in the form and for Phase 7's in-place editor. Refusals are cached (their
+`exploredOrder` is the reachable set Phase 6 draws), and the two directions of a pair are two entries because
+`oneWay` walkways are ordinary here.
+
+Four defects the tests found, all of them mine, all of them worth naming:
+
+- **Absent and empty were different keys.** `{}` and `{ blockedEdges: new Set() }` hashed apart, so a hook
+  defaulting to `NO_BLOCKED_EDGES` would have missed on every query while one omitting the field hit. The key's
+  own equality assertion caught it before there was a UI to hide it in; the normalisation is at
+  `cache.ts`'s `routeCacheKey`, with the sentence.
+- **A hit rate that could read 100 % after two misses.** `view()` was going to read `LRUCache`'s counters, which
+  count *map reads* — and a lookup refused for a mismatched closure set never reaches the list's `get`, so
+  `misses` stayed `0`. `RouteCache` now keeps its own `lookups`/`hits` and derives `misses` as the difference, so
+  `lookups === hits + misses` cannot be false by construction. Found by *reports a rate, and reports having no
+  data as no data*, which is the test that would have been written off as pedantry.
+- **A claim about object identity I had to withdraw.** The first draft asserted a hit returns the *same* object;
+  it returns a shallow copy stamped `cached: true`, because the stored entry must keep reporting itself as fresh
+  or it lies to whichever query reads it next. The test asserts deep equality instead, and says why.
+- **`peek` then `get` needed a branch no caller can reach.** The single-probe `get` is both faster and fully
+  covered; the ordering nuance it trades (a refused collision has been promoted) is in the comment, behind a
+  64-bit collision and a matching count.
+
+`RouteResult.cached` is true only of the copy a hit returns; the three engine specs that assert
+`expect(result.cached).toBe(false)` still pass because a search never reports itself as remembered — the flag
+belongs to the seam above them, which is where it should have been all along. `hitRate` is `null` rather than `0`
+when nothing has been read, and the card prints no provenance line at all rather than a line of zeroes when the
+caller has no cache to report.
+
+**The UI.** A badge (`from the cache` / `searched just now`) plus one sentence — `2 of 4 lookups hit (50 %) · 2 of
+192 answers kept, 1 entry evicted` — between the metrics and the directions, and a `Clear the route cache (3
+answers kept)` button in the form, disabled while the cache is empty because a button that answers "nothing
+happened" to every press is worse than no button. The tone is a `data-tone` attribute as well as a colour, for
+the same reason the compare legend's swatches carry a `data-pattern`. The copy is built in
+`ui/route/route-summary.ts` (`cacheLine`, `cacheClearLabel`, `formatPercent`), so the card still contains no
+arithmetic and the strings are assertable without a DOM; `src/ui` still imports nothing from `@/engine` — the
+counters arrive as `CacheFacts`, a structural copy chosen over a boundary leak.
+
+**The benchmark.** `npm run bench` loads `src/engine` through Vite's SSR runner (the `validate-map.mjs` idiom, so
+the table measures the app's searches) and 100/1 000/10 000-vertex graphs from `src/engine/testing/random-graph.ts`
+— the generator the property tests already used, moved out of `__tests__/helpers.ts` and re-exported so a
+benchmark and a sweep cannot quietly draw different graphs. Three warm-up runs, the **median of 15**, eight
+corner-to-corner queries per graph, `trace: false`, and four assertions before any timing is believed: every
+query reaches a destination, A\* and Dijkstra return identical costs on every pair, BFS never uses more hops than
+Dijkstra, and the settled count is *identical across all fifteen runs* (which is what entitles it to be printed
+without an error bar). The table is written into `docs/ALGORITHMS.md` between two markers, and
+`src/test/bench-report.spec.ts` fails if the markers go missing, if the row count or environment line changes
+shape, if the deterministic column stops coming first, or if the script's own guarantees — the sizes, the seed,
+`RUNS = 15`, the correctness checks — are edited away. `ALGORITHMS.md` §13's rule is applied to this table too:
+no row is sorted by its timings.
+
+What it found is the part worth keeping: **A\* settles 0.99× of Dijkstra's vertices on synthetic graphs**, not
+fewer, because `randomGraph` places its vertices on a linear congruence over the index — admissible, uninformative,
+so the estimate is paid for and buys nothing. On `campus.json`, where the coordinates are a plan, the same code
+settles 0.35×. A benchmark that reported the win without the condition for it is the kind of table a student
+believes, so the generated prose says this out loud in the file where the numbers live.
+
+**Tests: 678 in 44 files**, up from 631 in 40. Composition: 18 `algorithms/cache.spec.ts`, 7
+`testing/random-graph.spec.ts`, 6 `src/test/route-cache.spec.ts`, 5 `src/test/bench-report.spec.ts`, 6 in
+`route-summary.spec.ts`, 2 in `route-card.spec.ts`, 2 in `route-controls.spec.ts`, 1 in `compare-campus.spec.ts`.
+Nothing removed: every `it`/`it.each` name present at the cp4 tip is present now (`comm` over the sorted name
+lists, dropped set empty), no spec file was deleted, and no existing spec's count changed except upward.
+`src/test/arch-rules.ts` grew one entry (`src/engine/testing` in `ENGINE_TESTED_DIRS`) — a guard widened, so the
+shared generator is under the same "every engine module has a spec named after it" rule as the searches.
+
+Coverage: All files **99.20 / 95.79 / 100 / 99.61** — functions 100 % project-wide. `cache.ts` and
+`random-graph.ts` are **100 on all four metrics**, as are `route-summary.ts`, `route-card.tsx`,
+`route-controls.tsx` and the four `ui/compare/*.tsx`. The known open arms are unchanged and unchanged-by-me:
+`structures/lru-cache.ts` 93.54 / 80.95 (the Phase 1 list, recorded in that PR's description),
+`ui/map/route-plan.ts`, `route-options.ts` 100 / 94.44 (the comparator's `0`), `replay-plan.ts:93` and
+`build-graph.ts:606`, each an arm `noUncheckedIndexedAccess` requires and no caller can reach. `useRouteCache.ts`
+joins the hooks excluded by name, with the reason — and with the `react-hooks/exhaustive-deps` warning it
+provokes answered in a comment instead of silenced: the "unnecessary" dependencies are the ones that make the
+value correct, and `useSyncExternalStore` is the alternative that costs more than it saves for two integers.
+
+**Numbers recorded for their own sake:** `npm run map:validate` is unchanged at 39 nodes, 56 edges, 9 415.3 m,
+0 errors, 2 warnings; `package.json` gained one script line (`bench`) and no dependency, and
+`package-lock.json` is byte-identical to `origin/main`'s.
+
+**One incident, for the record.** Mid-checkpoint the sandbox was re-provisioned: `node_modules` (not persisted by
+design) was gone and `HEAD` had rolled back to the Phase 0 merge commit while the cp4 files sat uncommitted in the
+tree. Recovery was `git fetch origin` → `git reset --hard origin/arena/7ba87a36-marg-campus-navigator` → `npm ci`,
+and `diff -rq` between the restored tree and a copy of the working tree proved the two states identical, so
+nothing written was lost and the commit that had already been pushed was the reason. A checkpoint discipline that
+pushes after every checkpoint pays for itself at moments like this; it is not only for the reviewer.

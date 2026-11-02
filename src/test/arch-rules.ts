@@ -156,6 +156,10 @@ export const ENGINE_CONSUMERS_ALLOWED: readonly string[] = [
 /** Directory pairs that must exist for the "every module has a spec" rule. */
 export const ENGINE_TESTED_DIRS: readonly string[] = [
   'src/engine/structures',
+  // cp5: the seeded generator `npm run bench` and every sweep share. It joined this list rather than being left
+  // unlisted because "no engine module without a spec" is the rule that makes sharing it safe — the benchmark's
+  // graphs and the tests' graphs are the same code, so the code that draws them is under test like any other.
+  'src/engine/testing',
   'src/engine/algorithms',
   'src/engine/routing',
   'src/engine/geo',

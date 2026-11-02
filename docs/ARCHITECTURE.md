@@ -39,7 +39,7 @@ Since Phase 3 cp5 the list also holds five `.tsx` components — `route/route-ca
 dependency and `renderToStaticMarkup` needs no DOM: a component whose *output* is assertable is a
 component whose statements are measurable — with `compare-table.tsx`, `compare-legend.tsx`,
 `compare-swatch.tsx` and `map/layers/compare-layer.tsx` since cp4, nine in all — every one of them at 100 %
-statements. They were not always: `route-controls.tsx` carried 76.92 % from Phase 3 to Phase 4 on three
+statements, including the badge and the clear button cp5 hung off the card and the form. They were not always: `route-controls.tsx` carried 76.92 % from Phase 3 to Phase 4 on three
 `onChange` arrows that only a *dispatched* event runs, and the gap was described as the honest shape of a static
 render. It was not. `ReplayPanel` holds no state, so its spec calls the component as the function it is, walks the
 element tree that comes back, and invokes the handler found there — an `onKeyDown` is a property, and a property
@@ -86,8 +86,37 @@ literally the same call rather than a second switch to keep honest. The componen
 decides; `src/test/compare-campus.spec.ts` measures the result against a Bellman-Ford written into the spec, so
 the table's "best" is an optimum and not a minimum of whatever happened to run.
 
-What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts`, `useCompare.ts`
-and the
+Compare mode is that arrangement one level up. `ui/compare/compare-plan.ts` owns the three decisions the feature
+makes — which value wins a column (`bestIn`, with a `decides: false` column returning the empty set so the timing
+measurement can never be ranked), how a coincident route stays visible (`LANE_OFFSET_PX`, `offsetPxOf`,
+`shiftedSegment`), and what the numbers mean in a sentence (`compareInsight`) — and `hooks/useCompare.ts` runs
+the three searches through `runSearch`, the seam `useRoute` already owned, so "the same question three ways" is
+literally the same call rather than a second switch to keep honest. The components render; the plan module
+decides; `src/test/compare-campus.spec.ts` measures the result against a Bellman-Ford written into the spec, so
+the table's "best" is an optimum and not a minimum of whatever happened to run.
+
+The cache cp5 added is the same argument with the ownership moved where the *knowledge* is. The policy, the key
+and the counters live in `src/engine/algorithms/cache.ts`, because the key has to describe the whole of
+`RouteSearchOptions` and that type is the engine's; `runSearch` in `hooks/useRoute.ts` is where a picker's string
+becomes a function call and where the cache is consulted, once, so `useCompare` inherited the cache without
+acquiring any cache code; and the words a reader sees — "from the cache", "2 of 4 lookups hit (50 %)" — are built
+in `ui/route/route-summary.ts`, which is pure, and drawn by `route-card.tsx`. `src/ui` still imports nothing from
+`@/engine`: the cache's numbers reach the card as a structural copy (`CacheFacts`), which is duplication chosen
+over a boundary leak.
+
+Two consequences of that split are recorded here because a reviewer should not have to rediscover them. The hook
+that reports the counters, `hooks/useRouteCache.ts`, reads them inside a `useMemo` whose dependency list contains
+one entry the memo does not syntactically read (`epoch`) and one it only reads to be *honest about when the value
+was taken* (`signature`); React's exhaustive-deps rule correctly calls those unnecessary and the file says so in
+the open, because the alternative — `useSyncExternalStore` — needs the cache to notify subscribers and to hand
+back a referentially stable snapshot, and for two integers that is a second data structure per read. And
+`src/engine/testing/random-graph.ts` is engine code holding a *test* generator, moved out of
+`__tests__/helpers.ts` the moment `npm run bench` needed it: a benchmark measuring a second generator measures a
+second thing, so the specs re-export what they used to define, and `src/engine/testing` joined
+`ENGINE_TESTED_DIRS` so the shared code is held to the same "every module has a spec" rule as the rest.
+
+What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts`, `useCompare.ts`,
+`useRouteCache.ts` and the
 map layers whose behaviour is `getBoundingClientRect`, `ResizeObserver` and focus — with the reason in
 `vite.config.ts` rather than quietly omitted from the number. Adding jsdom would buy the rest; it would
 also be a new dependency in a project whose dependency list is itself under test, so it is out of scope

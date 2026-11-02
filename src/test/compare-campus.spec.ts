@@ -227,4 +227,51 @@ describe('compare mode on the campus', () => {
     // ties being the short hops across one corridor, where the frontier runs out before the estimate can help.
     expect(fewer).toBeGreaterThan(1400)
   })
+
+  it('states the breadth-first overshoot in all three shapes, per scope', () => {
+    // A figure without its denominator is how a total and a maximum got swapped once: "BFS's routes are
+    // 5 042.7 m longer" is 380 pairs *summed*, and it was later reused as "up to 5 042.7 m", a maximum it
+    // never was. So this test pins all three shapes for both pair sets, and the scope travels with each number
+    // — every figure §8, §13 and the checkpoint logs print appears in one of these two objects.
+    const namedPlaces = model.nodes
+      .filter((node: GraphNode) => node.kind !== 'junction' && node.label !== '')
+      .map((node: GraphNode) => String(node.id))
+    expect(namedPlaces).toHaveLength(model.summary.placeCount)
+
+    const placePairs = namedPlaces.flatMap((from) =>
+      namedPlaces.filter((to) => to !== from).map((to) => [from, to] as const),
+    )
+    expect(overshoot(placePairs)).toEqual({ pairs: 380, max: 257.7, total: 5042.7, mean: 13.3, positive: 71 })
+    expect(overshoot(pairs)).toEqual({ pairs: 1482, max: 257.7, total: 20201.2, mean: 13.6, positive: 297 })
+
+    // The worst pair happens to be two named places, so both scopes share the maximum while their totals differ
+    // by a factor of four — which is the point of keeping the pair set next to the number.
+    expect(overshoot(placePairs).max).toBe(overshoot(pairs).max)
+    expect(overshoot(pairs).total).toBeGreaterThan(overshoot(placePairs).total * 3)
+  })
 })
+
+/**
+ * `bfs.metres − dijkstra.metres` over `shortest`, on ordered pairs where both searches found a route.
+ *
+ * The engine rounds metres to a tenth, so the aggregates are rounded to a tenth too rather than compared with a
+ * tolerance: 0.1 m on a 1 500 m walk is a rounding, and a test that allowed 1 m would stop noticing a change of
+ * a single pair's geometry.
+ */
+function overshoot(pairList: readonly (readonly [string, string])[]) {
+  const tenth = (value: number): number => Math.round(value * 10) / 10
+  const diffs: number[] = []
+  for (const [from, to] of pairList) {
+    const best = runSearch(model.graph, from, to, 'dijkstra', 'shortest')
+    const hops = runSearch(model.graph, from, to, 'bfs', 'shortest')
+    if (best.ok && hops.ok) diffs.push(hops.metres - best.metres)
+  }
+  const total = diffs.reduce((left, right) => left + right, 0)
+  return {
+    pairs: diffs.length,
+    max: tenth(Math.max(...diffs)),
+    total: tenth(total),
+    mean: tenth(total / diffs.length),
+    positive: diffs.filter((difference) => difference > 0.05).length,
+  }
+}

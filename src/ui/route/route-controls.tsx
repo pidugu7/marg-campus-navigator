@@ -11,6 +11,8 @@
  * the reason the form would still compile if every search were replaced tomorrow.
  */
 import { ArrowLeftRight } from 'lucide-react'
+import { cacheClearLabel } from './route-summary'
+import type { CacheFacts } from './route-summary'
 import { ALGORITHM_CHOICES, algorithmChoice, pickerRows } from './route-options'
 import type { PlaceOption, ProfileChoice, ProfileName } from './route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
@@ -38,6 +40,13 @@ export interface RouteControlsProps {
    */
   readonly compare: boolean
   readonly onCompare: (next: boolean) => void
+  /**
+   * What the route cache holds right now, or `null` when the app has no cache to report. It reaches the form and
+   * not just the card because the *button* that clears it belongs to the request: a reader deciding whether to
+   * press it is deciding whether they want the next three searches to run again.
+   */
+  readonly cache?: CacheFacts | null
+  readonly onClearCache?: () => void
 }
 
 interface PickerProps {
@@ -92,6 +101,8 @@ export function RouteControls({
   onSwap,
   compare,
   onCompare,
+  cache = null,
+  onClearCache,
 }: RouteControlsProps) {
   const choice = algorithmChoice(algorithm)
   // A `find` left optional rather than a lookup promised total, and no helper for it: if a row is ever missing the
@@ -167,6 +178,19 @@ export function RouteControls({
           how it is found. Merging them into one paragraph would be the shorter markup and the worse lesson. */}
       {trade === undefined ? null : <p className="route-note">{trade.note}</p>}
       <p className="route-note">{choice.note}</p>
+      {/* The one control on this form that changes nothing about the walk. `disabled` follows the size rather than
+          the rate, because "clear" is only a thing to do when there is something in there — and because a button
+          that reports 0 % hits after a clear would otherwise stay live and do literally nothing. */}
+      {onClearCache === undefined ? null : (
+        <button
+          type="button"
+          className="cache-clear"
+          disabled={cache === null || cache.size === 0}
+          onClick={onClearCache}
+        >
+          {cacheClearLabel(cache)}
+        </button>
+      )}
     </div>
   )
 }

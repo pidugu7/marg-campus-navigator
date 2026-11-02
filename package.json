@@ -13,6 +13,7 @@
     "build:single": "tsc -b && vite build --mode singlefile",
     "preview": "vite preview",
     "map:validate": "node scripts/validate-map.mjs",
+    "bench": "node scripts/bench.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -197,4 +197,32 @@ describe('the route form', () => {
     expect(drawn('a')).toContain('no place')
     expect(drawn('a')).not.toContain('pick a place')
   })
+
+  it('offers to clear the cache only while there is something to clear', () => {
+    const clear = () => undefined
+    const empty = renderToStaticMarkup(createElement(RouteControls, props({ cache: null, onClearCache: clear }).props))
+    expect(empty).toContain('Clear the route cache')
+    expect(empty).toContain('class="cache-clear" disabled=""')
+    const full = renderToStaticMarkup(
+      createElement(RouteControls, props({ cache: { cached: false, hits: 1, misses: 1, lookups: 2, size: 3, capacity: 192, evictions: 0 }, onClearCache: clear }).props),
+    )
+    expect(full).toContain('Clear the route cache (3 answers kept)')
+    expect(full).not.toContain('class="cache-clear" disabled')
+    // A card built without a clear handler — a test fixture, an embedded pane — draws no dead button.
+    expect(renderToStaticMarkup(createElement(RouteControls, props().props))).not.toContain('cache-clear')
+  })
+
+  it('hands the press straight to the caller, with no argument to get wrong', () => {
+    let clears = 0
+    const controls = RouteControls(props({ onClearCache: () => { clears += 1 } }).props)
+    // `onClick` is a property on a rendered element, so it can be called without a document — the technique the
+    // replay panel's spec introduced. The clear button is the only `onClick` on this form that takes *no* event
+    // (the swap button takes none either, so both are exercised by the same loop and the count below is what
+    // distinguishes them: one press of each, and `swaps` would be 1 if the swap handler were reachable here).
+    const handlers = find(controls, 'onClick')
+    for (const each of handlers) {
+      if (typeof each === 'function' && each.length === 0) (each as () => void)()
+    }
+    expect(clears).toBe(1)
+  })
 })

@@ -8,15 +8,17 @@
  * `enabled` gates the work rather than hiding it. Three searches is three times the searching, and a reader who
  * never opens compare should never pay for it; a hidden-but-running comparison would also make the toggle a lie.
  *
- * No cache here yet: that is cp5's, and its key is exactly this hook's argument list — `(from, to, algorithm,
- * profile, blocked)` — which is why the arguments are primitives and why `runSearch` is called with nothing else.
+ * The cache arrives through `runSearch`, so it arrives here for free and with the same key as the card's query:
+ * `(from, to, algorithm, profile, blocked)`. That identity is the point of the last paragraph of cp3's note —
+ * three algorithms and one pair is one question asked three ways, and the answers are cached three ways too.
  */
 import { useMemo } from 'react'
+import { NO_BLOCKED_EDGES } from '@/engine'
 import { COMPARE_ORDER } from '@/ui/compare/compare-plan'
 import type { CompareRow } from '@/ui/compare/compare-plan'
 import { runSearch } from './useRoute'
 import type { RouteAlgorithmChoice } from './useRoute'
-import type { GraphIndex, NodeId, RouteResult, WeightProfile } from '@/engine'
+import type { EdgeId, GraphIndex, NodeId, RouteResult, WeightProfile } from '@/engine'
 
 export interface CompareState {
   /** Empty when nothing was asked or the toggle is off, which is how the map knows to draw no overlay. */
@@ -58,10 +60,17 @@ export function useCompare(
   to: NodeId,
   profile: WeightProfile,
   enabled: boolean,
+  blockedEdges: ReadonlySet<EdgeId> = NO_BLOCKED_EDGES,
 ): CompareState {
   const rows = useMemo(() => {
     if (!enabled || index === null || from === '' || to === '') return [] as const
-    return COMPARE_ORDER.map((algorithm) => rowOf(algorithm, runSearch(index, from, to, algorithm, profile)))
-  }, [index, from, to, profile, enabled])
+    // Three questions, three cache lookups. Toggling compare off and on again is the commonest way this hook
+    // runs twice, and the second time every row is served from the entries the card filled — which is the one
+    // case where "compare three searches" is free rather than three times the work, and the reason the answer's
+    // `cached` flag is worth keeping on the row rather than dropping with the rest of the metrics.
+    return COMPARE_ORDER.map((algorithm) =>
+      rowOf(algorithm, runSearch(index, from, to, algorithm, profile, blockedEdges)),
+    )
+  }, [index, from, to, profile, enabled, blockedEdges])
   return { rows, active: rows.length > 0 }
 }

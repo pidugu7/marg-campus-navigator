@@ -340,4 +340,22 @@ describe('the route card', () => {
     expect(badCost).toContain('A walkway is priced wrongly')
     expect(badCost).toContain('walkway &quot;a-b&quot; cost 0')
   })
+
+  it('says where the answer came from, between the numbers and the directions', () => {
+    const html = render({ ...found(), cache: { cached: true, hits: 2, misses: 2, lookups: 4, size: 2, capacity: 192, evictions: 0 } })
+    expect(html).toContain('class="cache-line"')
+    expect(html).toContain('from the cache')
+    expect(html).toContain('2 of 4 lookups hit (50 %)')
+    // The tone is an attribute as well as a colour, so the badge reads the same in a monochrome print or a
+    // high-contrast theme — the rule the compare legend already holds itself to.
+    expect(html).toContain('data-tone="hit"')
+  })
+
+  it('says nothing about provenance when the caller has no cache to report', () => {
+    expect(render(found())).not.toContain('cache-line')
+    expect(render({ ...found(), cache: null })).not.toContain('cache-line')
+    // …and a fresh search with a cache behind it still says so: silence is for "unknown", not for "not cached".
+    expect(render({ ...found(), cache: { cached: false, hits: 0, misses: 1, lookups: 1, size: 1, capacity: 192, evictions: 0 } }))
+      .toContain('searched just now')
+  })
 })

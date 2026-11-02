@@ -87,13 +87,22 @@ describe('the preference selector', () => {
     // question and a second copy of the switch would be a second thing to keep honest. So: the baseline is still
     // taken inside the hook, and the only other caller goes through the same one function.
     const useRoute = source('src/hooks/useRoute.ts')
-    expect(useRoute).toContain("runSearch(index, from, to, algorithm, 'shortest')")
+    expect(useRoute).toContain("runSearch(index, from, to, algorithm, 'shortest', blockedEdges)")
     expect(useRoute).toContain('export function runSearch(')
-    const useCompare = source('src/hooks/useCompare.ts')
-    expect(useCompare).toContain('runSearch(index, from, to, algorithm, profile)')
-    for (const name of ['dijkstra(', 'aStar(', 'bfs(']) {
-      expect(useCompare, `a search named directly in the compare hook`).not.toContain(`= ${name}`)
+    // cp5 grew the seam rather than wrapping it: the cached call is the one both hooks use, the uncached one is
+    // exported only for the two places that must not be answered from memory, and neither hook calls a search
+    // directly. A hook that reached for `dijkstra(` itself would be a second door with no cache in front of it.
+    expect(useRoute).toContain('cachedSearch(')
+    const uncached = useRoute.slice(useRoute.indexOf('export function searchUncached('))
+    expect(uncached.slice(0, uncached.indexOf('\n}')), `the uncached seam must stay uncached`).not.toContain('cachedSearch(')
+    for (const [name, file] of [['useRoute', useRoute], ['useCompare', source('src/hooks/useCompare.ts')]] as const) {
+      for (const search of ['dijkstra(', 'aStar(', 'bfs(']) {
+        expect(file, `${name} calls ${search} directly`).not.toContain(`= ${search}`)
+      }
     }
+    expect(useRoute.match(/blockedEdges/g)?.length ?? 0).toBeGreaterThanOrEqual(6)
+    const useCompare = source('src/hooks/useCompare.ts')
+    expect(useCompare).toContain('runSearch(index, from, to, algorithm, profile, blockedEdges)')
   })
 
   it('leaves the note optional rather than promising a row that may not exist', () => {

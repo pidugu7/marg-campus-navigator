@@ -161,6 +161,8 @@ export interface RouteSummary {
   /** The Δ against the same query with no preference, `''` when there is none to quote. */
   readonly delta: string
   readonly rows: readonly SummaryRow[]
+  /** What the cache says about this answer, or `null` when the caller has no cache to report. */
+  readonly cache: CacheLine | null
   readonly steps: readonly StepView[]
   /** One clause for the pane's status line, so a screen reader gets the finding and not only the list. */
   readonly announced: string
@@ -201,7 +203,12 @@ export interface ProfileLine {
   readonly delta: ProfileDelta | null
 }
 
-export function summarise(route: RoutableView, paceMps: number, profile?: ProfileLine): RouteSummary {
+export function summarise(
+  route: RoutableView,
+  paceMps: number,
+  profile?: ProfileLine,
+  cache?: CacheFacts | null,
+): RouteSummary {
   // A turn is a step that is not the opening heading and not a standstill. Counted from `direction`, not by
   // sniffing the sentence: `instruction` is the wording half, and a rule that reads prose to recover a fact the
   // leg already carries breaks the first time somebody improves a sentence.
@@ -244,10 +251,88 @@ export function summarise(route: RoutableView, paceMps: number, profile?: Profil
       { label: 'turns to make', value: String(turns.length) },
     ],
     steps: route.steps,
+    cache: cacheLine(cache),
     profile: profile?.label ?? '',
     delta: change,
     announced,
   }
+}
+
+/**
+ * What the cache knows, in the shape a card can print.
+ *
+ * `src/ui` may not import `@/engine` — the architecture test's one hard boundary — so the numbers arrive as a
+ * structural copy of the hook's view rather than as the engine's type. That is deliberate duplication: the card
+ * is drawn from seven integers, and a UI that imports the engine's vocabulary would stop being replaceable by
+ * anything that is not that engine.
+ */
+export interface CacheFacts {
+  readonly cached: boolean
+  readonly hits: number
+  readonly misses: number
+  readonly lookups: number
+  readonly size: number
+  readonly capacity: number
+  readonly evictions: number
+}
+
+export interface CacheLine {
+  /** `from the cache` or `searched just now` — the badge, and the only word that says whether this number was
+   *  computed for this keystroke. */
+  readonly badge: string
+  readonly tone: 'hit' | 'fresh'
+  /** `2 of 4 lookups hit (50 %)`. */
+  readonly rate: string
+  /** `2 answers kept of 192` plus an eviction clause when there is one to report. */
+  readonly occupancy: string
+}
+
+/**
+ * A percentage with at most one decimal.
+ *
+ * `Math.round(rate * 1000) / 10` rather than `toFixed(1)`, and no trailing-zero stripping on top of it:
+ * rounding to tenths of a percent in the *number* already leaves `50` printing as `50`, and the first draft of
+ * this function divided by ten a second time on the theory that `50.0` needed tidying. It printed 2 of 4 lookups
+ * as "5 %", which is the kind of mistake a one-line table of examples catches — hence the test below it.
+ */
+export function formatPercent(rate: number): string {
+  return `${String(Math.round(rate * 1000) / 10)} %`
+}
+
+/** One clause of the summary line, or `''` when there is nothing to say. */
+function clause(count: number, singular: string, plural: string): string {
+  return count === 0 ? '' : `${String(count)} ${count === 1 ? singular : plural}`
+}
+
+/**
+ * The sentence under the numbers, built from the counters and nothing else.
+ *
+ * The hit rate is quoted over `lookups`, and `lookups` counts calls to the cache rather than searches: a hit
+ * means "the answer to this exact question was already here", which is a claim about the question, not about the
+ * route. An eviction is named only when one happened, because a line that reports `0 evicted` on every card
+ * teaches a reader that the number is decoration.
+ */
+export function cacheLine(facts: CacheFacts | null | undefined): CacheLine | null {
+  if (facts === null || facts === undefined) return null
+  const rate =
+    facts.lookups === 0
+      ? 'no lookups yet'
+      : `${String(facts.hits)} of ${String(facts.lookups)} lookups hit (${formatPercent(facts.hits / facts.lookups)})`
+  const evicted = clause(facts.evictions, 'entry', 'entries')
+  return {
+    badge: facts.cached ? 'from the cache' : 'searched just now',
+    tone: facts.cached ? 'hit' : 'fresh',
+    rate,
+    occupancy: evicted === ''
+      ? `${String(facts.size)} of ${String(facts.capacity)} answers kept`
+      : `${String(facts.size)} of ${String(facts.capacity)} answers kept, ${evicted} evicted`,
+  }
+}
+
+/** The clear button's label. A control that says what it will cost to use is a control worth using. */
+export function cacheClearLabel(facts: CacheFacts | null | undefined): string {
+  if (facts === null || facts === undefined || facts.size === 0) return 'Clear the route cache'
+  return `Clear the route cache (${String(facts.size)} ${facts.size === 1 ? 'answer' : 'answers'} kept)`
 }
 
 /** What each of the five refusals means to a person who just clicked something. */

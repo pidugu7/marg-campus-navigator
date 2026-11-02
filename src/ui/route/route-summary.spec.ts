@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   EMPTY_ROUTE_COPY,
+  cacheClearLabel,
+  cacheLine,
+  formatPercent,
   describeFailure,
   formatDelta,
   formatMetres,
@@ -265,4 +268,51 @@ describe('the preference line', () => {
     expect(bare.delta).toBe('')
     expect(bare.announced).toBe('1,517.7 m, 18.1 min, 3 steps, by a-star on the “Shortest walk” preference.')
   })
+
+describe('the cache line', () => {
+  const facts = { cached: true, hits: 2, misses: 2, lookups: 4, size: 2, capacity: 192, evictions: 0 }
+
+  it('quotes the rate over lookups, and says so when there are none', () => {
+    expect(cacheLine(facts)?.rate).toBe('2 of 4 lookups hit (50 %)')
+    expect(cacheLine({ ...facts, hits: 1, lookups: 3 })?.rate).toBe('1 of 3 lookups hit (33.3 %)')
+    expect(cacheLine({ ...facts, hits: 0, lookups: 0 })?.rate).toBe('no lookups yet')
+    expect(cacheLine({ ...facts, hits: 4, lookups: 4 })?.rate).toBe('4 of 4 lookups hit (100 %)')
+  })
+
+  it('names an eviction only when one happened', () => {
+    expect(cacheLine(facts)?.occupancy).toBe('2 of 192 answers kept')
+    expect(cacheLine({ ...facts, evictions: 1 })?.occupancy).toBe('2 of 192 answers kept, 1 entry evicted')
+    expect(cacheLine({ ...facts, evictions: 7 })?.occupancy).toBe('2 of 192 answers kept, 7 entries evicted')
+  })
+
+  it('says which of the two things happened, in words, and carries the tone beside them', () => {
+    expect(cacheLine(facts)).toMatchObject({ badge: 'from the cache', tone: 'hit' })
+    expect(cacheLine({ ...facts, cached: false })).toMatchObject({ badge: 'searched just now', tone: 'fresh' })
+  })
+
+  it('draws nothing when the caller has no cache to report, rather than a line of zeroes', () => {
+    // `null` and `undefined` are both "not telling", and a `0 of 0 lookups hit (0 %)` sentence would be a claim
+    // about a cache the app may not even have.
+    expect(cacheLine(null)).toBeNull()
+    expect(cacheLine(undefined)).toBeNull()
+    expect(summarise(route(), 1.4).cache).toBeNull()
+    expect(summarise(route(), 1.4, undefined, facts).cache).not.toBeNull()
+  })
+
+  it('labels the clear button by what it will cost to press', () => {
+    expect(cacheClearLabel(null)).toBe('Clear the route cache')
+    expect(cacheClearLabel({ ...facts, size: 0 })).toBe('Clear the route cache')
+    expect(cacheClearLabel({ ...facts, size: 1 })).toBe('Clear the route cache (1 answer kept)')
+    expect(cacheClearLabel(facts)).toBe('Clear the route cache (2 answers kept)')
+  })
+
+  it('rounds a percentage to one decimal and drops a zero that pretends to be precision', () => {
+    expect(formatPercent(0.5)).toBe('50 %')
+    expect(formatPercent(1)).toBe('100 %')
+    expect(formatPercent(0)).toBe('0 %')
+    expect(formatPercent(1 / 3)).toBe('33.3 %')
+    expect(formatPercent(2 / 3)).toBe('66.7 %')
+    expect(formatPercent(0.025)).toBe('2.5 %')
+  })
+})
 })

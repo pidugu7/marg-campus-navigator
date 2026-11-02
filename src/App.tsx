@@ -3,6 +3,7 @@ import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIc
 import { useCampus } from '@/hooks/useCampus'
 import { useEngineContract } from '@/hooks/useEngineContract'
 import { useRoute } from '@/hooks/useRoute'
+import { useRouteCache } from '@/hooks/useRouteCache'
 import { ReplayPanel } from '@/ui/route/replay-panel'
 import { RouteCard } from '@/ui/route/route-card'
 import type { ReplaySource } from '@/ui/map/replay-plan'
@@ -47,6 +48,11 @@ export default function App() {
   // baseline, which is the one profile whose numbers need no explanation.
   const [profile, setProfile] = useState<ProfileName>(DEFAULT_PROFILE)
   const { result, baseline } = useRoute(model.graph, from, to, algorithm, profile)
+  // The cache's counters, read once per query rather than once per render (`useRouteCache` says why). The
+  // signature is the query the card is answering, and it is a string for the same reason the hook's arguments
+  // are: four separate dependencies is four chances to forget one, and a rate that updates only when someone
+  // remembers to re-read it is a rate nobody believes.
+  const cache = useRouteCache(model.graph, `${from}>${to} ${algorithm} ${profile}`)
   const labelOf = useMemo(() => new Map(model.nodes.map((node) => [node.id, node.label])), [model])
   // The picker's rows are the engine's own labels and blurbs, narrowed to the UI's union — which is where a
   // sixth profile in `routing/cost.ts` would stop compiling, in the file that has to give it a name.
@@ -96,6 +102,18 @@ export default function App() {
     }
     return {
       state: 'found',
+      // Two facts about provenance, both from the same place the numbers come from: whether this answer was
+      // remembered, and what the cache has been doing all session. A card with no `cache` says nothing about
+      // where its numbers came from rather than guessing — which is what a test-built card does.
+      cache: {
+        cached: result.cached,
+        hits: cache.view?.hits ?? 0,
+        misses: cache.view?.misses ?? 0,
+        lookups: cache.view?.lookups ?? 0,
+        size: cache.view?.size ?? 0,
+        capacity: cache.view?.capacity ?? 0,
+        evictions: cache.view?.evictions ?? 0,
+      },
       route: {
         algorithm: result.algorithm,
         metres: result.metres,
@@ -123,7 +141,7 @@ export default function App() {
         ),
       },
     }
-  }, [result, baseline, engine])
+  }, [result, baseline, engine, cache.view])
   const places = useMemo(() => placeOptions(model.nodes, model.edges), [model])
 
   // The map takes four strings and an id list; it never sees a `RouteResult`. Unwrapping the union is this
@@ -209,6 +227,11 @@ export default function App() {
               onProfile={setProfile}
               compare={compare}
               onCompare={setCompare}
+              // The same facts the card prints, so the button's label and the badge cannot drift into describing
+              // two different caches. `cached` is not a cache fact — it is a fact about *this answer* — which is
+              // why the two objects are built here rather than one being passed down twice.
+              cache={cache.view === null ? null : { ...cache.view, cached: result?.cached ?? false }}
+              onClearCache={cache.clear}
               onSwap={() => {
                 // One pair of updates, both from the previous values: two `setState` calls that read the state
                 // above them would swap `a → b` into `b → b`, because React hands each callback the value from

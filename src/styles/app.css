@@ -867,3 +867,59 @@ body {
     font-size: 0.64rem;
   }
 }
+
+/* cp5: the cache's own two lines under the metrics. Deliberately quiet — provenance is a footnote to the answer,
+   not a fourth metric, and a badge that shouted would train a reader to look at it instead of at the route. */
+.cache-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.6875rem;
+}
+
+.cache-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.0625rem 0.375rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Two tones, and the same two words in the text: a reader who cannot see the difference is told the difference. */
+.cache-badge[data-tone="hit"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.cache-badge[data-tone="fresh"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cache-clear {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.6875rem;
+  /* 32px is the floor the replay's controls already hold themselves to under a narrow column; a text button
+     with a smaller box is a button that is pressed by accident. */
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+}
+
+.cache-clear:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.cache-clear:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

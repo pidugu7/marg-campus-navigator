@@ -11,7 +11,7 @@
  */
 import { ArrowUp, Footprints, TriangleAlert } from 'lucide-react'
 import { EMPTY_ROUTE_COPY, describeFailure, formatMetres, summarise, turnRotation } from './route-summary'
-import type { FailureView, ProfileLine, RoutableView } from './route-summary'
+import type { CacheFacts, FailureView, ProfileLine, RoutableView } from './route-summary'
 
 /**
  * What the card draws: nothing yet, a walk, or a refusal. `null` is the first and not an error.
@@ -31,6 +31,11 @@ export type RouteView =
        * drawn at all rather than drawn with a zero in it.
        */
       readonly profile?: ProfileLine
+      /**
+       * The cache's own numbers, and whether this answer is one of them. Optional in the same way `profile` is:
+       * a card built without them says nothing about provenance rather than claiming it searched.
+       */
+      readonly cache?: CacheFacts | null
     }
   | { readonly state: 'missing'; readonly failure: FailureView }
 
@@ -65,7 +70,7 @@ export function RouteCard({ fromLabel, toLabel, view }: RouteCardProps) {
 
   // The preference travels into `summarise` rather than being printed straight from the view: the label and the
   // Δ need the same rounding rules as the distance and the duration, and they belong in the file that owns them.
-  const summary = summarise(view.route, view.paceMps, view.profile)
+  const summary = summarise(view.route, view.paceMps, view.profile, view.cache)
   return (
     <div className="route-card">
       <p className="route-pair">
@@ -119,6 +124,19 @@ export function RouteCard({ fromLabel, toLabel, view }: RouteCardProps) {
           </div>
         ))}
       </dl>
+
+      {/* Provenance, between the numbers and the directions, because it is a fact *about* the numbers: a reader
+          told "11 vertices settled" is entitled to know whether anything settled them for this keystroke. The
+          sentence is built in `route-summary.ts`, so the card still contains no arithmetic — and the badge says
+          the same words in its text as in its `data-tone`, so nothing here depends on a colour to be understood. */}
+      {summary.cache === null ? null : (
+        <p className="cache-line">
+          <span className="cache-badge" data-tone={summary.cache.tone}>
+            {summary.cache.badge}
+          </span>
+          {` ${summary.cache.rate} · ${summary.cache.occupancy}`}
+        </p>
+      )}
 
       <ol className="route-steps">
         {summary.steps.map((step, position) => (

@@ -827,8 +827,15 @@ never chosen from noise.
 | A\* never settles more vertices than Dijkstra | 1 482 / 1 482 (the admissibility claim, checked not asserted) |
 | A\* settles strictly fewer | 1 431 pairs; 51 ties, all short hops across one corridor |
 | BFS is among the best on segments | 1 482 / 1 482, and strictly best on 100 |
+| BFS's extra distance against Dijkstra, `shortest` | all 1 482 node pairs: max 257.7 m, total 20 201.2 m, mean 13.6 m, non-zero on 297. The 380 named-place pairs: same max, total 5 042.7 m, mean 13.3 m, non-zero on 71 |
 
-That last row is the lesson the header hint carries: breadth-first *minimises* segments, so it can never lose
+The row above it is the reason the pair set travels with the number. "BFS is 5 042.7 m longer" is a *total* over
+380 place pairs, and on its own it reads like a single route that overshoots by five kilometres; the largest
+single overshoot anywhere on the plate — place pairs or node pairs — is 257.7 m, and the mean is thirteen metres on
+a fifteen-hundred-metre walk. Both scopes, in all three shapes, are asserted together in one test, so the mistake
+cannot be made twice.
+
+That "among the best on segments" row is the lesson the header hint carries: breadth-first *minimises* segments, so it can never lose
 that column, and it is strictly better on only 100 pairs because on a walkway graph the shortest walk is usually
 also the one with fewest crossings. A column a search optimises by construction is worth marking and worth
 saying so under.
@@ -850,17 +857,93 @@ not a result.
 
 ---
 
+## 14. The route cache (`algorithms/cache.ts`, `hooks/useRoute*`, `ui/route/route-summary.ts`)
+
+The app asks the same question over and over: a preference moved back to where it was, a swap pressed twice,
+compare toggled on for the third time. `LRUCache` arrived in Phase 1 with no caller at all — a structure taught
+before the thing that would use it, which is the order a course wants and the order that tempts a project into
+building a second, simpler cache later. cp5 put the one structure in front of the searches, and this section is
+what the intervening phases had to get right for that to be a one-line change in the hook.
+
+**What the key is.** `from`, `to`, the algorithm's name, and *every field of `RouteSearchOptions`*, walked in
+sorted order rather than listed. The walk is the design: an option added to that type next month is in the key
+the day it is added, because nothing had to be remembered about it. One normalisation was found by the key's own
+equality test and is worth the anecdote — `{}` and `{ blockedEdges: new Set() }` hashed apart, so a hook that
+defaults to an empty closure set would have missed on every query while one that omits the field hit. "Nothing is
+closed" now has one spelling in the key and three in the callers.
+
+**What a key cannot be.** `cost` and `now` are functions, and two closures with identical source text can
+compute different weights. `routeCacheKey` answers `null` for any function-valued option, and a `null` key means
+*do not cache this*, not *cache it under a coarser key* — a cache that cannot tell two questions apart is worse
+than no cache, because it is confident. `searchUncached` is exported so the cache's own test can compare a
+remembered answer against the search it claims to remember, and `scripts/bench.mjs` uses it so the benchmark does
+not time a `Map` lookup.
+
+**What is refused.** A different profile, a different closure set, the reverse direction, another graph. The
+closure set gets a second lock beyond its hash: an entry stores the sorted ids beside the result, and a lookup
+that does not match them is a miss — so a 64-bit collision *and* a matching count is the worst case, and the
+worst case is a recomputation. The reverse direction is not treated as the reverse of the route because
+`oneWay` walkways are ordinary on this campus (`docs/MAP-DATA.md`), and a pair of entries costs nothing.
+
+**What a hit reports.** `cached: true`, and nothing else. `expanded` and `ms` belong to the search that produced
+the entry: the settled count is what §13 ranks, and re-stamping `ms` to `0` would replace a measurement with a
+statement about the call that skipped the work. The card's badge is what tells a reader the search did not run
+again; the numbers under it stay the search's own.
+
+**When it is invalidated.** Never, and that is the answer. One cache per `GraphIndex` in a `WeakMap`, so a new
+graph *is* a new cache and an entry cannot outlive the graph it describes; no `useEffect` watches for map
+changes, and none can be forgotten. `clearRouteCache` exists because Phase 7's editor will mutate a graph in
+place and because a button that says "the cache is empty now" has to mean it — which is what the app's Clear
+control does today, resetting the counters with the entries: a hit rate quoted against lookups that are no
+longer possible is a number about a cache nobody has.
+
+**192 entries, by arithmetic rather than tuning.** A session toggles between the pairs a person actually uses —
+the 20 named places × 19 partners for one algorithm and profile, a few dozen entries — while a sweep of all
+1 482 ordered pairs at five profiles asks 22 230 questions no fixed capacity fits. So the sweep *thrashes* the
+cache and keeps answering correctly, which is the only property a bound owes, and it is measured: over all
+1 482 pairs and three algorithms the cached answer is identical to a cold search on every field but the two above.
+
+**One figure this file had to correct.** The counters belong to `RouteCache`, not to `LRUCache`, and that was a
+bug before it was a paragraph. The list counts *map reads*, and a lookup refused for a mismatched closure set
+never reaches its `get`, so `misses` stayed `0`: two hits and two misses printed a 100 % hit rate. `lookups ===
+hits + misses` is now true by construction, because `lookups` counts calls to `lookup` and `misses` is the
+difference — which is the same lesson the repository keeps re-learning, in a new costume: a derived number read
+from someone else's ledger is only as honest as the events that ledger records.
+
+The data structure's own answer to "why is an LRU a hash map *and* a doubly linked list, not just a `Map`?" is
+the header of `src/engine/structures/lru-cache.ts`, which is where it belongs: the file that cannot work any other
+way is the file that explains why.
+
+---
+
 ## Benchmarks (Phase 4)
 
-`npm run bench` writes a Markdown table into **Measured results** below. Timings vary by machine,
-so the generated table must record **Node version, platform, CPU model and count, total memory**,
-plus commit and dataset size, above the numbers. A benchmark without its environment is a rumour.
+`npm run bench` (`scripts/bench.mjs`) writes a Markdown table into **Timings** below and nothing else in this
+file: the numbers are never typed, and `src/test/bench-report.spec.ts` fails if the markers around the generated
+block go missing, which is the difference between "generated by script" as a property of the repository and as a
+claim in a commit message. The script loads `src/engine` through Vite's SSR module runner, for the same reason
+`scripts/validate-map.mjs` does — a second implementation in `.mjs` would measure that instead of the app — and
+it draws its graphs from `src/engine/testing/random-graph.ts`, the generator the property tests already share, so
+the table and the sweeps describe one family of graphs. Timings vary by machine, so the generated block records
+**Node version, platform, CPU model and count, total memory**, plus commit, seed and graph sizes, above the
+numbers. A benchmark without its environment is a rumour.
 
-Planned: Dijkstra vs A\* expanded-node ratio per profile; lazy-deletion duplication factor (pushes ÷
-expansions); trie vs `Array.filter` at 1 000 labels; LRU hit rate and mean lookup over a recorded
-query trace; `buildComponents` rebuild cost per closure (the number that justifies not cloning).
+The cache is deliberately **not** benchmarked here: a timing loop that reads it would measure a `Map`, and the
+question "how much does a hit cost" has the answer "one shallow copy", which does not need a harness. What the
+cache is measured on is its *behaviour* — §14, and `src/test/route-cache.spec.ts` over all 1 482 campus pairs.
+
+Still planned, in the phase that needs them: lazy-deletion duplication factor (pushes ÷ expansions, cp5 of
+Phase 5's data-structure chapter if it survives the cut); trie vs `Array.filter` at 1 000 labels (Phase 5);
+`buildComponents` rebuild cost per closure (the number that justifies not cloning, Phase 6).
 
 ## Measured results
+
+Two tables live in this section. The first is what the test suite proves, and is kept up to date by hand with every
+checkpoint. The second is machine-generated: `npm run bench` rewrites everything between the two comment markers, so
+its numbers are never typed, and a hand-edit between them is a hand-edit that gets overwritten the next time
+anybody measures anything. That is the arrangement the brief asked for — "write the table into the docs by script"
+— and the markers are what make it enforceable rather than aspirational: `bench-report.spec.ts` fails if they go
+missing, which is also the failure mode where someone deletes them and starts typing timings in.
 
 *Re-measured at Phase 3 checkpoint 5, `npm run check` on this branch (Vitest, Node in the project's own
 sandbox). These are test-suite facts, not benchmark timings — `npm run bench` is Phase 4 and nothing in this
@@ -868,19 +951,71 @@ table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **513 tests in 30 files** · build ok |
+| `npm run check` | typecheck · lint · **678 tests in 44 files** · build ok (Phase 4 cp5; the checkpoint logs carry the earlier counts) |
 | `src/engine` | **262 tests** — structures 77, `algorithms/` 142 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 29), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
 | `src/data` | 86 (`build-graph.spec.ts`) |
 | `src/ui` | **118** — `map` 79 (view 25, marker-plan 15, tip-content 16, icons 8, route-plan 8, route-layer 7), `route` 39 (route-options 13, route-summary 13, route-card 13) |
 | `src/test` | 33 — architecture guard 14, `map:validate` 6, campus routing 6, route styles 5, schema drift 2 |
+| coverage of the cache and its neighbours | `algorithms/cache.ts` and `testing/random-graph.ts` **100 % on all four metrics**; `structures/lru-cache.ts` unchanged from Phase 1 at 93.54 / 80.95 (its open arms are the ones listed in the Phase 1 PR description); `ui/route/route-summary.ts`, `route-card.tsx`, `route-controls.tsx` and the four `ui/compare/*.tsx` all 100 / 100, so the badge, its sentence and the clear button are measured even with no DOM |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
-| coverage of the route UI | `route-plan.ts`, `route-summary.ts`, `route-card.tsx`, `route-layer.tsx` all **100 %** statements and branches — the last two are components, measured because `renderToStaticMarkup` needs no DOM; `route-options.ts` 100 / 94.44, its one open arm the sort comparator's `0`, which needs two rows with the same label *and* the same id, so it is documented in `route-options.spec.ts` instead of faked; `route-controls.tsx` 77.77 / 100, and the two uncovered lines are its `onChange` arrows, which only a *dispatched* event runs and there is no DOM to dispatch one with — the gap is left in the report rather than the file being taken out of it |
+| coverage of the route UI | `route-plan.ts`, `route-summary.ts`, `route-card.tsx`, `route-layer.tsx` all **100 %** statements and branches — the last two are components, measured because `renderToStaticMarkup` needs no DOM; `route-options.ts` 100 / 94.44, its one open arm the sort comparator's `0`, which needs two rows with the same label *and* the same id, so it is documented in `route-options.spec.ts` instead of faked. `route-controls.tsx` was 77.77 on that reading from Phase 3 to Phase 4 and is **100 %** now, because the `onChange` arrows turned out to be reachable by *calling the handler as a property* rather than by dispatching an event at a DOM that does not exist here — a limitation of imagination, presented for two checkpoints as a limitation of the harness |
 | sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 weighting profiles (metres, unit, jittered, `× 0.2`) and again × the 5 shipped cost profiles on per-edge varied attributes, zero-scale equivalence on **60**, measured admissibility on **80**, and profile admissibility on **60** graphs × 5 profiles × every vertex; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
 | the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); `landmarkOf` → 185 legs name something, 1 219 name a junction and therefore say nothing; **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
-| the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
+| the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; breadth-first's routes are 5 042.7 m longer **in total** and depth-first's 291 146.1 m longer **in total** — both are sums over the 380 pairs, not single-route figures: over these pairs breadth-first's maximum is 257.7 m (`cafeteria → sports-ground`) and its mean 13.3 m, positive on 71 of the 380; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
+| the same, on all 1 482 ordered node pairs | breadth-first's extra distance against Dijkstra: maximum 257.7 m (the same pair), total 20 201.2 m, mean 13.6 m, positive on 297 of the 1 482 — pinned in `src/test/compare-campus.spec.ts` by *states the breadth-first overshoot in all three shapes, per scope*, which asserts all ten figures above and below together. A figure without its pair set is not a measurement: 5 042.7 m is a total over 380 pairs, and it was once reused as a maximum |
 | `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
 | bundle | `dist/assets/index-*.js` 286.69 kB (gzip 90.32 kB) — unchanged from cp1, because no UI module imports the searches yet; Phase 3 cp4 is where they reach a screen |
 | the 5 000-vertex line | `dfs.spec.ts`: 5 000 visits, last depth 4 999, no `RangeError` |
 
 The n = 5 000 rank-bound case and the 500/5 000/120-step property trials cited in §1–§5 are Phase 1's and
 still stand; they are inside the 513.
+
+### Timings — `npm run bench`
+
+<!-- bench:begin -->
+
+Seeded synthetic graphs, `npm run bench` on `c1fe552`. Node `v22.22.3` · linux x64, kernel 6.1.158+ · 2 × Intel(R) Xeon(R) Processor @ 2.60GHz · 3.8 GB total.
+Graphs drawn from `marg-campus-navigator/phase4/bench/<n>` with `extraEdges = V`; 8 corner-to-corner queries per graph;
+a 3-run warm-up then the **median of 15 runs**; `trace: false` on every search.
+
+| vertices | edges | search | **settled per query** | median ms per query | work against Dijkstra |
+| --- | --- | --- | --- | --- | --- |
+| 100 | 198 | Dijkstra | 54.0 | 0.065 | 1.00× (the baseline) |
+| 100 | 198 | A* | 53.4 | 0.151 | 0.99× |
+| 100 | 198 | BFS | 66.0 | 0.095 | 1.22× |
+| 1000 | 1999 | Dijkstra | 547.1 | 0.794 | 1.00× (the baseline) |
+| 1000 | 1999 | A* | 543.0 | 1.092 | 0.99× |
+| 1000 | 1999 | BFS | 521.6 | 0.579 | 0.95× |
+| 10000 | 19998 | Dijkstra | 6,011.9 | 17.290 | 1.00× (the baseline) |
+| 10000 | 19998 | A* | 5,974.8 | 24.062 | 0.99× |
+| 10000 | 19998 | BFS | 3,818.6 | 8.714 | 0.64× |
+
+**Read the middle column, not the one next to it.** Settled vertices are the same number on every run on every
+machine, which is what makes them the comparison. The milliseconds are a median over 15 runs on one box,
+with that box’s caches, thermal state and neighbours in the pipeline; they will not reproduce on yours. Use them
+for the shape — the growth from 100 to 10 000 vertices is the heap’s `log V` arriving — and never to name a
+winner. The same reasoning is why `ms` carries `decides: false` in the compare table (§13), and why no row of
+this table is sorted by its own timings.
+
+### Why A* settles the same number of vertices here
+
+It should not, and the difference between this table and the campus figures is the lesson rather than a defect.
+The heuristic is `minCostPerUnit(index) × euclidean(a, b)` — the cheapest cost per unit of *drawn distance*,
+measured from the graph so it can never overestimate. `randomGraph` places vertices at (i × 37) % 1000 and
+(i × 91) % 1000: a linear congruence over the vertex index, admissible in the sense the proof needs and
+useless in the sense that helps the search. An admissible-but-uninformative estimate turns A* into
+Dijkstra with a tax, and the 0.99× above is that tax: the estimate is checked on every pop and buys
+nothing, because the drawing carries no information about the walk.
+
+On `campus.json`, where the coordinates are a plan, the same three lines of code settle 3 043 times against
+Dijkstra’s 8 605 over the 380 ordered place pairs (§13): 0.35×, not 0.99×. A heuristic is only as good as the
+geometry it is drawn from, and a benchmark that reported the win without the condition for it would be the
+kind of table a student believes and an examiner marks down.
+
+BFS is the third row and the least comparable one: it settles fewer vertices than both at 10 000 because it
+stops when the goal appears in its next layer, and the layer is measured in hops. The walks it returns are
+longer in metres by a maximum of 257.7 m on this campus, and the table in §13 is where that is stated with its
+denominator attached. A benchmark row for BFS is a row about a queue, not about a shortest path.
+
+<!-- bench:end -->
+
