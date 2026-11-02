@@ -33,14 +33,27 @@ and `route/route-options.ts` + `route/route-summary.ts` (what the pickers offer,
 written) are plain functions over numbers and strings, and they are in `coverage.include` beside the
 engine, because a decision that can be reasoned about can be tested.
 
-Since Phase 3 cp5 the list also holds three `.tsx` components — `route/route-card.tsx`,
-`route/route-controls.tsx` and `map/layers/route-layer.tsx` — because `react-dom/server` is already a
+Since Phase 3 cp5 the list also holds five `.tsx` components — `route/route-card.tsx`,
+`route/route-controls.tsx`, `map/layers/route-layer.tsx`, and since Phase 4 cp3 `route/replay-panel.tsx` and
+`map/layers/replay-layer.tsx` — because `react-dom/server` is already a
 dependency and `renderToStaticMarkup` needs no DOM: a component whose *output* is assertable is a
-component whose statements are measurable. Two of them are at 100 %; `route-controls.tsx` is at 76.92 %
+component whose statements are measurable. Four of the five are at 100 %. `route-controls.tsx` is at 76.92 %
 and stays in the list at that number, because its three uncovered lines are `onChange` arrows — one per
-`<select>` — that only a *dispatched* event runs — the gap is the honest shape of what a Node-only harness can reach, and taking
-the file out of the report would hide that rather than say it. `src/test/route-styles.spec.ts` adds the
-check the markup cannot make: every class name the route UI emits has a rule in a stylesheet.
+`<select>` — that only a *dispatched* event runs; the gap is the honest shape of what a static render reaches,
+and taking the file out of the report would hide that rather than say it.
+
+The replay panel does not have that gap, and the reason is worth copying. `ReplayPanel` holds no state, so its
+spec calls the component as the function it is, walks the element tree that comes back, and invokes the handler
+found there — an `onKeyDown` is a property, and a property does not need a document to be *called*. Five keys,
+five buttons, a slider and a speed select are covered that way, and the payoff is not the number: it is that a
+button's label and the action it dispatches are pinned together, which is the class of bug Phase 4 cp2 actually
+found. The same technique would take `route-controls.tsx` to 100 %; it is left for the checkpoint that next
+touches that file, and named here so nobody mistakes the 76.92 % for a limit of the harness. One branch stays
+open in `replay-plan.ts` — the `?? null` on the line that reads `exploredOrder[step - 1]`, unreachable because
+`step` is clamped to the array's own length and required by `noUncheckedIndexedAccess` all the same. It is
+documented rather than tested, per the rule this project set in Phase 1. `src/test/route-styles.spec.ts` adds the
+check the markup cannot make: every class name the route UI emits has a rule in a stylesheet. The replay
+layer joined that scan in cp3, which is what the scan's own header predicted it would be used for.
 
 Phase 4's preference selector followed the same shape rather than inventing one: `useEngineContract` hands
 the engine's profile table to `App`, `route-options.ts` narrows it to rows typed by the UI's own `ProfileName`
@@ -48,6 +61,21 @@ union (so a sixth profile in `routing/cost.ts` is a compile error where a name h
 second search that makes a delta possible lives in `useRoute` — a component never asks for two routes, and the
 subtraction lives in `route-summary.ts` next to the formatters it has to agree with. `src/test/cost-profiles.spec.ts`
 is the guard that keeps the wording in the engine and out of the component, by reading the two files.
+
+The replay is that shape again, one notch smaller, and it is worth naming because it is the app's only
+animation. `ui/map/replay-plan.ts` holds every rule — what a frame is, how a step moves, what a frame says in
+words, what colour a rank gets — as pure functions over the two arrays a search already returned;
+`src/hooks/useReplay.ts` owns the one `setInterval` in the app and nothing else; `ReplayPanel` is five buttons,
+a slider and a speed, all four front-ends for the same `replayStep`; `ReplayLayer` draws what a frame says.
+The consequence for a viva is the useful part: stepping, scrubbing, `End` and the arrow keys cannot disagree,
+because there is one clamp in one file, and the map can never show a vertex the table does not list.
+
+The hook reads no media query. `window` and `document` are banned across `src/` by the lint configuration — the
+rule exists so the engine stays renderable in a Node harness and the project has kept it app-wide — so
+`prefers-reduced-motion` is answered where it can be read without a global: the frontier pulse is switched off
+by a `@media` rule in `map.css`, and the clock never starts itself, which makes autoplay impossible for
+everyone and is a stronger promise than a branch that might not run. `src/test/route-styles.spec.ts` asserts the
+media query exists and names the right selector, because that is the part CSS can be held to.
 
 What stays excluded by name is the gesture and effect code — `use-viewport.ts`, `use-tooltip.ts` and the
 map layers whose behaviour is `getBoundingClientRect`, `ResizeObserver` and focus — with the reason in

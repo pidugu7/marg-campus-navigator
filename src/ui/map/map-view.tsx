@@ -22,10 +22,12 @@ import { useMemo, useRef } from 'react'
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { DEFAULT_EDGE_ATTRIBUTES } from '@/data'
 import type { BuildingSpec, CampusModel, CanvasSpec, NodeSpec, SurfaceSpec, ZoneSpec } from '@/data'
+import { ReplayLayer } from './layers/replay-layer'
 import { RouteLayer } from './layers/route-layer'
 import { BaseLayer } from './layers/base-layer'
 import { BuildingLayer } from './layers/building-layer'
 import { MarkerLayer, type MarkerEntry } from './layers/marker-layer'
+import type { ReplayFrame } from './replay-plan'
 import { NodeLayer } from './layers/node-layer'
 import { WalkwayLayer } from './layers/walkway-layer'
 import { legendIcons, iconFor } from './icons'
@@ -54,6 +56,11 @@ export interface MapViewProps {
    * caller (`App`) unpacks the hook's result here, which is the one place the two halves are allowed to meet.
    */
   readonly route?: MapViewRoute | null
+  /**
+   * One frame of a search replay, or nothing. It is a *frame* and not a state: the map has no clock, and the
+   * panel that owns the clock is beside it. `null` means the map draws no overlay, which is the normal case.
+   */
+  readonly replay?: ReplayFrame | null
 }
 
 /** What the route layer needs, in the map's own vocabulary. */
@@ -67,7 +74,7 @@ export interface MapViewRoute {
 
 const UNZONED = 'var(--walk-case)'
 
-export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep, route }: MapViewProps) {
+export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep, route, replay }: MapViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const extent = useMemo(() => extentOf(canvas), [canvas])
   const viewport = useViewport(extent.width, extent.height, svgRef)
@@ -219,6 +226,10 @@ export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, 
           toScreen={toScreen}
           tooltip={tooltip}
         />
+        {/* Below the answer, above the walkways: the explored region is the search's own footprint, and the
+            route is what the footprint produced. Drawing it over the line would let the lesson hide the
+            conclusion. */}
+        {replay ? <ReplayLayer frame={replay} positions={positions} unitsPerPx={unitsPerPx} /> : null}
         {route ? (
           <RouteLayer
             nodeIds={route.nodeIds}

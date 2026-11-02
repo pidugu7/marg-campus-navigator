@@ -88,6 +88,12 @@ export default defineConfig(({ mode }) => {
           'src/ui/route/route-controls.tsx',
           'src/ui/route/route-summary.ts',
           'src/ui/map/layers/route-layer.tsx',
+          // Phase 4 cp3: the replay's decision logic is arithmetic over two arrays and is tested exhaustively, and
+          // its two components render in Node like the route's do. The clock that reads them — `src/hooks/useReplay.ts`
+          // — is a `setInterval` and its cleanup, and belongs with the hook code above: no DOM, no measurement.
+          'src/ui/map/replay-plan.ts',
+          'src/ui/route/replay-panel.tsx',
+          'src/ui/map/layers/replay-layer.tsx',
         ],
         exclude: [
           'src/engine/**/*.test.ts',

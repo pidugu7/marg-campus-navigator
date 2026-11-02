@@ -564,3 +564,101 @@ body {
   font-family: var(--font-mono);
   font-size: 0.7rem;
 }
+
+/* --- the replay panel (Phase 4) ---------------------------------------------------------------------
+   The panel is a card's worth of controls, so it borrows the card's border and radius rather than inventing a
+   third surface. No background of its own: the side column already has one, and a second fill on top of it is
+   how a panel starts looking like a dialog nobody asked for. */
+.replay-panel {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* The panel is focusable because ← and → are its controls, and a focus ring is the price of that. */
+.replay-panel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.replay-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.replay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Greyed rather than missing: a step back from the first frame is not a thing, and saying so before the press
+   is the same rule the swap button follows. */
+.replay-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.replay-button--play {
+  border-color: var(--route);
+  color: var(--route);
+}
+
+.replay-scrub {
+  flex: 1 1 6rem;
+  min-width: 5rem;
+  accent-color: var(--route);
+}
+
+.replay-speed-label {
+  font-size: 0.66rem;
+  color: var(--ink-soft);
+}
+
+.replay-speed {
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+}
+
+.replay-caption {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-hint {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 380px) {
+  /* Touch targets first: at 360 px the five buttons are the part a thumb misses, and the caption is the part a
+     reader can afford to lose a pixel of. */
+  .replay-button {
+    width: 30px;
+    height: 28px;
+  }
+
+  .replay-caption {
+    font-size: 0.66rem;
+  }
+}

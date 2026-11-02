@@ -441,6 +441,12 @@ diagonal `a-c`, routed `a` → `c`. The frontier is written as `vertex@cost`, an
 over two edges, while the *fewest walkways* answer is the 250 m diagonal — which is why BFS (below) is not
 interchangeable with this, and why the result carries both `cost` and `metres`.
 
+**The table is the replay.** Those last two columns are the only input the UI needs to animate the search:
+step *k* shows the first *k* entries of `exploredOrder` shaded and `frontierSnapshots[k-1]` pulsing, with the
+path drawn at the final row and nowhere earlier. Nothing is recomputed and nothing is re-run, so the overlay
+cannot tell a story the table does not tell — `src/ui/map/replay-plan.spec.ts` pins the pairing, including the
+off-by-one that would otherwise show a frontier the search had already emptied.
+
 **What the specs pin.** The pinned cases: a line, the square where the direct edge loses, a genuine 200-vs-200
 tie (same answer every run, because the tie-break is the comparator and not the insertion order), a one-way
 walkway that can be followed in one direction only, a closure that forces a detour, a closure that strands

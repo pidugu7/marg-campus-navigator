@@ -827,3 +827,54 @@ arrows (one per `<select>`) — a dispatched event needs a DOM and none will be 
 `route-controls.tsx`, `route-card.tsx`, `useRoute.ts`, `routing/cost.ts`, `app.css`), and the served control
 module contains the `route-profile` markup — the picker's repaint on a click is the part only the preview can
 show, and it is stated as such rather than claimed.
+
+
+### Phase 4, checkpoint 3 — the replay: watching a search decide
+
+**Done.** The overlay Phase 4 asked for, built out of the two arrays a search already returns.
+
+`src/ui/map/replay-plan.ts` is the whole of the reasoning and holds no React: `frameOf` slices `exploredOrder`
+and pairs it with `frontierSnapshots[step-1]` (the off-by-one that would otherwise show a frontier the search had
+already emptied is pinned by name), `visitColor` interpolates cyan `hsl(187 92% 55%)` to violet
+`hsl(268 85% 66%)` by visit rank, `replayStep` is the reducer every control moves — `play` at the end restarts,
+`forward` at the end stops playing rather than parking a spinner on a finished search, `back`/`scrub` take the
+clock off — `frameControls` returns the panel's five rows with their disabled rules, `keyAction` maps the five
+keys, `intervalMs` turns a speed into a tick, and `frameCaption` writes the sentence. `src/hooks/useReplay.ts`
+owns the app's only `setInterval` and nothing else; `ReplayLayer` draws one `<circle>` per settled vertex inside
+the markers' `translate(x y) scale(unitsPerPx)` trick, so a dot is 4.2 px at every zoom, and the route appears
+**only** on the last frame; `ReplayPanel` is a `map` over rows plus a slider, and `map-view.tsx` takes a
+`replay?: ReplayFrame | null` beside the existing `route?:` one and draws it under the answer's line.
+
+Reduced motion is answered twice and reads `matchMedia` zero times. The clock never starts itself, so no frame
+can arrive unbidden for anyone, and the one animation — the frontier's pulse — is switched off by
+`@media (prefers-reduced-motion: reduce)` in `map.css`. That second half is the stronger one: it is applied by
+the engine that paints, and cannot be skipped by a branch that failed to run. The first half is also what the
+lint configuration forces, which bans `window` across `src/` except at the mount point; the honest options were
+widening a deliberate rule or writing `matchMedia` bare to slip past it, and the replay now needs neither.
+
+Keyboard: the group is `tabIndex=0` with `←` `→` `Home` `End` `Space`, and the handler ignores an event whose
+`target` is not the group, so a `<select>` or slider with focus keeps its own arrows. The slider carries the
+caption as `aria-valuetext` (announced when a reader moves it, which is when the number is wanted) and the layer
+is `aria-hidden` (the panel says it in words; 41 circles should not also say it).
+
+**Tests: 571 in 34 files**, up from 533 in 31. New `src/ui/map/replay-plan.spec.ts` (20),
+`src/ui/map/layers/replay-layer.spec.ts` (6), `src/ui/route/replay-panel.spec.ts` (11 — four of them calling the
+handlers directly, which is also how the label↔action wiring got pinned). `src/test/route-styles.spec.ts` grew
+one test and its scope: the replay's two files joined the class scan its header had predicted would one day
+absorb the layers, so every `replay-*` class the overlay emits now has to have a rule, and the pulse has to have
+its `@media` answer, in the file that names it. No test was deleted and none was relaxed.
+
+Coverage: All files **98.92 / 95.25 / 99.17 / 99.37**, with `replay-layer.tsx` and `replay-panel.tsx` at 100 %
+on all four metrics and `replay-plan.ts` at 100 % except the documented `?? null` above (branch 98.07 %).
+`vite.config.ts` lists the three new modules by name; `useReplay.ts` stays out with the other hook code, and
+`PHASES.md` and `ARCHITECTURE.md` both say why rather than leaving the omission to be discovered.
+
+**Checked live, not just statically.** Dev server 200 for `/`, `replay-plan.ts`, `replay-layer.tsx`,
+`replay-panel.tsx`, `useReplay.ts`, `app.css`, `map.css`. The overlay was also rasterised at 360/768/1440 with
+the real campus geometry and the real stylesheet (a temporary harness in `/tmp`, `sharp` over `react-dom/server`
+output, deleted after): dots stay 4 px at every width while the campus scales under them, the cyan→violet ramp is
+distinguishable at 360, the current-vertex ring reads at the smallest size, and the route paints only on the last
+frame. Two notes, so the proof is not oversold: librsvg ignores `var()` and `vector-effect`, so the first run
+came back with no stroke at all and needed the tokens substituted by hand — a harness limitation, not an app
+bug; and the HTML panel cannot be rasterised here, so its narrow layout rests on the stylesheet rules (26→30 px
+buttons under 380 px, flex-wrapped row) and on the preview, which is open.

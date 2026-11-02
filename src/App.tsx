@@ -3,11 +3,14 @@ import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIc
 import { useCampus } from '@/hooks/useCampus'
 import { useEngineContract } from '@/hooks/useEngineContract'
 import { useRoute } from '@/hooks/useRoute'
+import { ReplayPanel } from '@/ui/route/replay-panel'
 import { RouteCard } from '@/ui/route/route-card'
+import type { ReplaySource } from '@/ui/map/replay-plan'
 import { RouteControls } from '@/ui/route/route-controls'
 import type { RouteView } from '@/ui/route/route-card'
 import { DEFAULT_PROFILE, algorithmChoice, placeOptions, profileChoices, swapEndpoints } from '@/ui/route/route-options'
 import { profileDelta } from '@/ui/route/route-summary'
+import { useReplay } from '@/hooks/useReplay'
 import type { ProfileName } from '@/ui/route/route-options'
 import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
 import { MapView } from '@/ui/map/map-view'
@@ -44,6 +47,20 @@ export default function App() {
   // The picker's rows are the engine's own labels and blurbs, narrowed to the UI's union — which is where a
   // sixth profile in `routing/cost.ts` would stop compiling, in the file that has to give it a name.
   const profiles = useMemo(() => profileChoices(engine.profiles, engine.profileOrder), [engine])
+
+  // The replay reads the *result*, not a second search: `exploredOrder` and `frontierSnapshots` are what the run
+  // recorded while it ran, so the overlay cannot disagree with the numbers in the card. A refusal carries them
+  // too — the empty region is the explanation, and it is the frame most worth replaying.
+  const replaySource = useMemo<ReplaySource>(
+    () => ({
+      exploredOrder: result?.exploredOrder ?? [],
+      frontierSnapshots: result?.frontierSnapshots ?? [],
+      path: result !== null && result.ok ? result.nodeIds : [],
+      seed: from === '' ? null : from,
+    }),
+    [result, from],
+  )
+  const replay = useReplay(replaySource, `${from}>${to} ${algorithm} ${profile}`)
 
   // The engine's result, narrowed to what a card can draw. `direction` and `reason` keep their string values on
   // purpose: the view model declares the unions it needs, so this is where a new turn bucket or a new refusal
@@ -148,6 +165,7 @@ export default function App() {
           zones={campusInfo.zones}
           gridStep={gridStep}
           route={route}
+          replay={replay.available ? replay.frame : null}
         />
 
         <aside className="side">
@@ -179,6 +197,17 @@ export default function App() {
             {/* The answer under the question: the card reads the same state the map is drawing from, so the two
                 can never disagree about which pair is being routed. */}
             <RouteCard fromLabel={labelOf.get(from) ?? from} toLabel={labelOf.get(to) ?? to} view={view} />
+
+            {/* Under the answer, because it explains the answer rather than adding to it. A refusal still gets
+                the panel: replaying a search that ran out of map is the most useful replay on this app. */}
+            {result === null ? null : (
+              <ReplayPanel
+                frame={replay.frame}
+                state={replay.state}
+                algorithmLabel={algorithmChoice(algorithm).label}
+                dispatch={replay.dispatch}
+              />
+            )}
           </section>
 
           <section className="card">

@@ -11,8 +11,9 @@
  * app config does compile JSX). A literal scan also reads better as a guard: what it fails on is "a component
  * mentions a class the stylesheets never mention", which is exactly the rename this test exists to catch.
  *
- * Only the route UI is in scope, deliberately: `src/ui/map` has three phases of class names of its own, and the
- * same guard for them belongs to whichever checkpoint next touches the layers.
+ * Only the route UI and the replay overlay are in scope, deliberately: `src/ui/map` has three phases of class
+ * names of its own, and the same guard for them belongs to whichever checkpoint next touches the layers — which
+ * was Phase 4 cp3, so `layers/replay-layer.tsx` joined the walk and the older layers are still its debt.
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -29,6 +30,8 @@ const sources = {
   card: read('../ui/route/route-card.tsx'),
   controls: read('../ui/route/route-controls.tsx'),
   layer: read('../ui/map/layers/route-layer.tsx'),
+  replayPanel: read('../ui/route/replay-panel.tsx'),
+  replayLayer: read('../ui/map/layers/replay-layer.tsx'),
 }
 
 /** Class names a stylesheet can reach — any selector mentioning `.name`, including in a descendant pair. */
@@ -116,15 +119,51 @@ describe('the route UI and the stylesheets', () => {
     expect(sheets.app.indexOf('@media (max-width: 380px)')).toBeGreaterThan(sheets.app.indexOf('@media (max-width: 900px)'))
   })
 
+  it('answers prefers-reduced-motion in CSS, not in a branch', () => {
+    // The panel does have a `reduced` flag, but it only refuses to *autoplay*. The pulse itself is silenced by a
+    // media query, so a reader who set the preference gets the reduced result even when the flag could not be
+    // read — a `matchMedia` call that throws in some harness must not leave an animation running.
+    // Every block, not the first: `map.css` is organised by feature, so the walkway dashes and the replay each
+    // carry their own reduced-motion rule, and a scan of one of them would be a scan of the wrong one.
+    const bodies = [...sheets.map.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([^}]*)\}/g)].map(
+      (match) => String(match[1]),
+    )
+    expect(bodies.length, 'map.css answers reduced motion somewhere').toBeGreaterThan(1)
+    const frontier = bodies.find((body) => body.includes('.replay-frontier'))
+    if (frontier === undefined) return expect.fail('no reduced-motion rule for .replay-frontier')
+    expect(frontier).toContain('animation: none')
+    // And the frame never becomes a class: 41 visited vertices are 41 `<circle>`s with an inline fill, not 41
+    // rules somebody has to keep in step with a ramp.
+    expect(sources.replayLayer).toContain('visitColor(')
+    expect(sources.replayLayer).not.toMatch(/replay-node--\d/)
+  })
+
   it('keeps the plate in `map.css` and the page in `app.css`', () => {
     // Both files are imported by `App`, so a class in the "wrong" one still paints: this asserts the project's
     // own organisation, which is the kind of thing a large phase quietly loses.
     const inMap = selectors(sheets.map)
     const inApp = selectors(sheets.app)
-    for (const name of ['layer-route', 'route-halo', 'route-line', 'route-pin--start', 'route-pin--end', 'route-pin-shape', 'route-pin-eye']) {
+    const plateClasses = ['layer-route', 'route-halo', 'route-line', 'route-pin--start', 'route-pin--end', 'route-pin-shape', 'route-pin-eye']
+    // The replay's overlay classes go in `map.css` because they are plate geometry: they scale with the world
+    // and they are drawn by a layer, not by a card.
+    plateClasses.push('layer-replay', 'replay-node', 'replay-node--current', 'replay-frontier', 'replay-path')
+    for (const name of plateClasses) {
       expect(inMap.has(name), name).toBe(true)
     }
-    for (const name of ['route-card', 'route-form', 'route-pickers', 'route-swap', 'picker', 'route-step', 'route-state', 'route-metrics', 'route-note']) {
+    const pageClasses = ['route-card', 'route-form', 'route-pickers', 'route-swap', 'picker', 'route-step', 'route-state', 'route-metrics', 'route-note']
+    // …and the panel's controls go in `app.css`, because a button is page furniture at any zoom level.
+    pageClasses.push(
+      'replay-panel',
+      'replay-buttons',
+      'replay-button',
+      'replay-button--play',
+      'replay-scrub',
+      'replay-speed',
+      'replay-speed-label',
+      'replay-caption',
+      'replay-hint',
+    )
+    for (const name of pageClasses) {
       expect(inApp.has(name), name).toBe(true)
     }
   })
