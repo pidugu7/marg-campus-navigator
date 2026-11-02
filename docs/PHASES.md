@@ -505,3 +505,34 @@ three fixed in the specs. One real flake came out of it too: the ladder asserted
 
 **Not in this checkpoint, on purpose.** `simplifyLegs` (cp3), the route UI (cp4), the result card, the
 responsive pass and README/ARCHITECTURE (cp5).
+### Phase 3, checkpoint 2b — the two checks asked for before cp3
+
+**Admissibility against the map's own numbers, and a new error.** `buildGraph` did *not* report an edge whose
+stated `metres` is less than the straight-line distance between its endpoints: `length-mismatch` is a symmetric
+±15 % **warning**, so `metres: 180` against a 190 m crow-flight — a 5.3 % gap, inside the tolerance, and in the
+impossible direction — passed in silence. It is now `shorter-than-crow-flight`, an **error**, with the band
+measured in ground metres (`0.1`, or one pixel's diagonal `√2 / pixelsPerMetre` at a coarse scale, whichever is
+larger) so that coordinate rounding is not reported as a lie. The edge stays in the graph — a report is not a
+deletion, and the coordinates are the trustworthy half — and `map:validate` on `campus.json` is unchanged at
+**0 errors, 2 warnings** (the tightest stated length in the file is exactly its derived value; the loosest is
+3.5 m *longer*). Three specs in `build-graph.spec.ts`: the error, its wording and the "edge survives the report" claim in one
+case; the silent shortfall below the rounding band; and the same 10 m gap judged against two different
+`pixelsPerMetre`. `src/test/schema-drift.spec.ts` demanded the docs matrix row and the per-code spec before it
+would pass, which is that test doing its job: the first run failed on exactly those two.
+
+**How the heuristic is scaled when a profile makes an edge cheaper than its length.** It is not a second knob —
+the factor is inside the measurement. `minCostPerUnit` takes `min` over traversable edges of `cost(e) / length(e)`
+with `cost` being the very function the search minimises, so `0.2 × metres` moves `k` to 0.2 and admissibility
+holds; a single discounted edge sets the bound for the whole map, because a lower bound must be lower
+everywhere. Three specs in `a-star.spec.ts` pin it, including the counterfactual: the same graph and profile with
+an *unscaled* `h = euclidean` returns the 250 m diagonal at cost 50 where the optimum is 40 — 10 units worse,
+and nothing in the types tells the two heuristics apart, which is the argument for measuring rather than
+configuring. `one-fifth` is now a fourth profile in the 200-graph parity sweep, so the A\*/Dijkstra equality is
+checked under a sub-linear cost and not merely claimed. `ALGORITHMS.md` §12 carries both paragraphs.
+
+**The guard, confirmed.** `src/test/architecture.test.ts` › *the guard itself* › **"keeps every file under
+src/engine/__tests__ in scope for the no-network and no-globals scans"** — a tripwire that iterates the
+directory and asserts membership in both scanned sets, so teaching `isTest` about `__tests__` (the tempting
+generalisation) would fail here instead of quietly exempting the engine's support modules from the "no backend"
+and "no platform globals" rules. It joins *widens the framework exemption to the engine's test directory, and no
+further*; the architecture guard is now 14 tests.

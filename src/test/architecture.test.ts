@@ -291,9 +291,25 @@ describe('the guard itself', () => {
     const helpers = files.find((f) => f.rel === 'src/engine/__tests__/helpers.ts')
     if (helpers === undefined) return expect.fail('src/engine/__tests__/helpers.ts went missing from the scan')
     expect(isEngineTestCode(helpers.rel), 'the test-support module may import vitest').toBe(true)
-    expect(helpers.isTest, '…but it is not a spec, so the network and global scans still read it').toBe(false)
+    expect(helpers.isTest, '…but it is not a spec, so it is still scanned as shipped code').toBe(false)
     // A shipped module must not inherit the exemption by being near a test.
     expect(isEngineTestCode('src/engine/algorithms/dijkstra.ts'), 'implementation code').toBe(false)
+  })
+
+  it('keeps every file under src/engine/__tests__ in scope for the no-network and no-globals scans', () => {
+    // Tripwires, not restatements: the two rules above read `engineFiles` (everything under `src/engine`,
+    // spec or not) and `scannableFiles` (everything outside `src/test` whose name says it is *not* a test),
+    // so a change to either predicate — most likely someone teaching `isTest` about the `__tests__`
+    // directory, which is the tempting generalisation — would drop the engine's support modules out of the
+    // scan silently. This fails instead. Widening an exemption to the test framework is one thing; widening
+    // it to `fetch` would end the "no backend" claim, and `PLATFORM_GLOBALS_IN_ENGINE` is what the
+    // `engineFiles` set is there to enforce on files like this one.
+    const support = files.filter((f) => f.rel.startsWith('src/engine/__tests__/'))
+    expect(support.length, 'the engine has a test-support directory to scan').toBeGreaterThan(0)
+    for (const file of support) {
+      expect(engineFiles.some((f) => f.rel === file.rel), `${file.rel} in the platform-global scan`).toBe(true)
+      expect(scannableFiles.some((f) => f.rel === file.rel), `${file.rel} in the no-network scan`).toBe(!file.isTest)
+    }
   })
 
   it('reads specifiers from import/export statements, not from prose', () => {

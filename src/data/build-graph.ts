@@ -81,6 +81,7 @@ export const MAP_ISSUE_CODES = [
   'missing-zone',
   'place-to-place',
   'length-mismatch',
+  'shorter-than-crow-flight',
   'non-simple-ring',
   'isolated-node',
   'outside-canvas',
@@ -138,6 +139,19 @@ const WALKWAYS: readonly SurfaceKind[] = ['paved', 'covered', 'gravel', 'grass',
 const GROUNDS = ['lawn', 'water', 'plaza', 'parking', 'construction'] as const
 /** A stated length this far from the coordinates is a stale measurement, not a fact to trust. */
 const LENGTH_TOLERANCE = 0.15
+/**
+ * How far *below* the straight line a stated length may sit before it is an error instead of a rounding
+ * artifact. `deriveMetres` rounds to a tenth of a metre, so one tenth is free; and at a coarse
+ * `pixelsPerMetre` a node one pixel off moves the crow-flight by more than that, so the floor rises to one
+ * pixel's diagonal of ground. Below this band the disagreement is the drawing's resolution, not a lie.
+ *
+ * The direction is what makes this an error while §`LENGTH_TOLERANCE`'s symmetric gap stays a warning: a
+ * walkway *longer* than the crow-flight is normal (paths bend), and a walkway *shorter* than the straight
+ * line is not a walkway. It is also the one data fault that reaches the algorithms: `geo/measure.ts` prices
+ * a metre of drawing off the graph, so if `metres` can understate the drawn distance, the numbers on the
+ * card and the plan disagree even though A\*'s estimate stays admissible by construction.
+ */
+const CROW_FLIGHT_SLACK_METRES = 0.1
 /** How many stranded ids a disconnected-network message names before "and others". */
 const STRANDED_SHOWN = 6
 
@@ -534,6 +548,15 @@ function walkEdges(index: Index): void {
       const gap = Math.abs(metres - derived) / derived
       if (gap > LENGTH_TOLERANCE) {
         warn(index, 'length-mismatch', id, `edge ${quote(id)} says ${String(metres)} m and its coordinates say ${String(derived)} m (${String(Math.round(gap * 100))}% apart); usually a node moved and this edge was not re-measured`)
+      }
+      const slack = Math.max(CROW_FLIGHT_SLACK_METRES, Math.SQRT2 / index.pixelsPerMetre)
+      if (derived - metres > slack) {
+        error(
+          index,
+          'shorter-than-crow-flight',
+          id,
+          `edge ${quote(id)} says ${String(metres)} m but its endpoints are ${String(derived)} m apart in a straight line; a walkway cannot be shorter than the crow-flight between its ends (allowed to be ${String(Math.round(slack * 100) / 100)} m short for rounding), so either a node moved since this length was measured or canvas.pixelsPerMetre is not the plan's scale`,
+        )
       }
     }
     if (from.raw.kind !== 'junction' && to.raw.kind !== 'junction') {

@@ -609,7 +609,26 @@ is not a slower Dijkstra — it is a *wrong* one.
 the 360° seam needs no branch), `minCostPerUnit(index, { cost?, blockedEdges? })` and
 `euclideanHeuristic(index, { cost?, blockedEdges?, scale? })`.
 
-**Admissibility, in three lines.** `k` is the minimum of `cost(e) / length(e)` over the edges this run may
+**A profile cheaper than a metre is a factor inside the measurement, not a second knob.** `cost` is the same
+function the search minimises, so a profile that prices ground at `0.2 × metres` — a pace multiplier, a
+discounted covered walkway, anything that makes an edge *cheaper than it is long* — moves `k` down by that
+factor on its own, because `k` is the minimum ratio and the ratio is taken after the profile has spoken. No
+caller passes a "cost factor" to the heuristic, and none is needed: `minCostPerUnit` **is** the smallest cost
+factor, measured per run and per closure set rather than declared. One discounted edge sets the bound for the
+whole map (a lower bound everywhere has to be), so a fast lane costs A* expansions and never correctness.
+`a-star.spec.ts` pins all three halves — the uniform `× 0.2` profile, the same graph with an unscaled
+`h = euclidean` returning a route 10 units worse, and a single discounted edge — and `one-fifth` is one of the
+four profiles in the 200-graph parity sweep for the same reason.
+
+**What the data layer refuses so that this stays true.** A stated `metres` *below* the crow-flight between its
+endpoints is `shorter-than-crow-flight`, an error in `buildGraph` (see `docs/SCHEMA.md`), with the tolerance
+measured in ground metres — a tenth, or one pixel's diagonal at a coarse `pixelsPerMetre`, whichever is
+larger. It does not make A* inadmissible: the estimate is priced off the drawing, so an understated label can
+only weaken it. What it breaks is the *card* — 180 m printed for a 190 m straight line is a walkway that does
+not exist — and the equality between `metres` and the picture the plan claims, so it is refused at the
+boundary where the scale is known rather than patched over in the engine, which cannot tell what a unit means.
+
+`k` is the minimum of `cost(e) / length(e)` over the edges this run may
 traverse. Any route is a chain of those edges, so it costs at least `k ×` the chain's length. A chain's length
 is at least the straight-line length by the triangle inequality. Hence `k × euclidean` never exceeds the true
 cost, and because `k` is a constant the same argument gives *consistency*, which is what lets the search return
@@ -660,13 +679,13 @@ table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **418 tests in 23 files** · build ok |
-| `src/engine` | **246 tests** — structures 77, `algorithms/` 127 (search-common 26, a-star 22, dfs 26, dijkstra 19, bfs 17, path-utils 17), geo 21, `__tests__/` 21 (contract 6, search-parity 15) |
-| `src/data` | 83 (`build-graph.spec.ts`) |
+| `npm run check` | typecheck · lint · **425 tests in 23 files** · build ok |
+| `src/engine` | **249 tests** — structures 77, `algorithms/` 130 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 17), geo 21, `__tests__/` 21 (contract 6, search-parity 15) |
+| `src/data` | 86 (`build-graph.spec.ts`) |
 | `src/ui/map` | 64 (view 25, marker-plan 15, tip-content 16, icons 8) |
-| `src/test` | 25 — architecture guard 13, `map:validate` 6, campus routing 4, schema drift 2 |
+| `src/test` | 26 — architecture guard 14, `map:validate` 6, campus routing 4, schema drift 2 |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
-| sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 3 profiles, zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
+| sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 profiles (metres, unit, jittered, `× 0.2`), zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
 | the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
 | `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
 | bundle | `dist/assets/index-*.js` 286.69 kB (gzip 90.32 kB) — unchanged from cp1, because no UI module imports the searches yet; Phase 3 cp4 is where they reach a screen |

@@ -57,6 +57,7 @@ const SEVERITIES: Record<(typeof MAP_ISSUE_CODES)[number], 'error' | 'warning'> 
   'missing-zone': 'warning',
   'place-to-place': 'warning',
   'length-mismatch': 'warning',
+  'shorter-than-crow-flight': 'error',
   'non-simple-ring': 'warning',
   'isolated-node': 'warning',
   'outside-canvas': 'warning',

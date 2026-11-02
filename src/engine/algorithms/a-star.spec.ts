@@ -127,6 +127,9 @@ describe('a-star, against dijkstra on 200 seeded graphs', () => {
     { name: 'metres', cost: LADDER_COST },
     { name: 'unit', cost: () => 1 },
     { name: 'jittered', cost: (edge) => 1 + edge.metres / 500 },
+    // Sub-linear on purpose: a factor below 1 is the case where an estimate scaled by an assumed 1 would
+    // overestimate, so the sweep below is also the sweep that proves `minCostPerUnit` is load-bearing.
+    { name: 'one-fifth', cost: (edge) => edge.metres * 0.2 },
   ]
 
   it('finds the same cost, and settles no more vertices', () => {
@@ -288,6 +291,51 @@ describe('a-star, the estimate itself', () => {
     expect(back.nodeIds).toEqual(['b', 'a'])
     // And the steps survive it: `routeLegs` drops the leg it cannot draw rather than inventing a corner.
     expect(back.steps.length).toBeGreaterThan(0)
+  })
+
+  it('takes the factor from the profile it is given, not from an assumed 1', () => {
+    // A profile may price a metre of walkway at less than one unit per metre — that is what a "fastest"
+    // profile with a pace multiplier, or a shaded route that discounts a covered walkway, does. The scale is
+    // then part of the measurement: `minCostPerUnit` divides each edge's cost by its drawn length and keeps
+    // the smallest, so a uniform factor of 0.2 moves the whole estimate down by 0.2 and admissibility holds.
+    const index = ladderCrossing()
+    const fifth: EdgeCost = (edge) => edge.metres * 0.2
+    expect(minCostPerUnit(index, { cost: fifth })).toBeCloseTo(0.2, 10)
+    const result = mustFind(aStar(index, 'a', 'c', { cost: fifth }), 'one-fifth profile')
+    expect(result.cost).toBeCloseTo(40, 10)
+    expect(result.nodeIds).toEqual(['a', 'b', 'c'])
+    expect(result.metres).toBe(200)
+  })
+
+  it('would answer wrongly on that profile if the estimate were not scaled', () => {
+    // The mirror of the test above, and the reason `minCostPerUnit` exists: hand A* the same graph with the
+    // obvious `h = metres between the points` — the assumption a fixed scale bakes in — and `a` looks like
+    // 141.42 of remaining work when the true cheapest cost is 40. The search then settles the diagonal first
+    // and stops, 10 units short of optimal, on a route a person could walk. Nothing in the types distinguishes
+    // the two heuristics, which is why the scaling is measured rather than configured.
+    const index = ladderCrossing()
+    const fifth: EdgeCost = (edge) => edge.metres * 0.2
+    const naive: Heuristic = (from, to) => euclidean(from, to)
+    const wrong = mustFind(aStar(index, 'a', 'c', { cost: fifth, heuristic: naive }), 'unscaled')
+    expect(wrong.nodeIds).toEqual(['a', 'c'])
+    expect(wrong.cost).toBeCloseTo(50, 10)
+    const scaled = mustFind(aStar(index, 'a', 'c', { cost: fifth }), 'measured scale')
+    expect(scaled.cost).toBeCloseTo(40, 10)
+    expect(wrong.cost).toBeGreaterThan(scaled.cost)
+  })
+
+  it('follows the cheapest edge, not the average, when one walkway is discounted', () => {
+    // A single fast lane — a 40 m covered moving walkway drawn 100 m long — sets the ratio for the whole map:
+    // the estimate must be a lower bound *everywhere*, so it is priced at that lane's 0.4 units per drawn
+    // unit and every other vertex's estimate shrinks with it. Under-estimating is allowed and costs
+    // expansions; the other direction costs correctness.
+    const index = ladderCrossing()
+    const lanes: EdgeCost = (edge) => (edge.id === 'a-b' ? 40 : edge.metres)
+    expect(minCostPerUnit(index, { cost: lanes })).toBeCloseTo(0.4, 10)
+    const star = mustFind(aStar(index, 'a', 'c', { cost: lanes }), 'with a fast lane')
+    const truth = mustFind(dijkstra(index, 'a', 'c', { cost: lanes }), 'with a fast lane, dijkstra')
+    expect(star.cost).toBeCloseTo(truth.cost, 10)
+    expect(truth.cost).toBe(140)
   })
 
   it('reports its own name, profile and clock in the metrics a card reads', () => {

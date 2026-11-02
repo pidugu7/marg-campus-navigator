@@ -317,6 +317,47 @@ describe('coordinates, canvas and lengths', () => {
     expect(issue.message).toContain('111%')
   })
 
+  it('refuses a length shorter than the straight line between the endpoints', () => {
+    // 180 against a 190 m crow-flight is a 5.3% gap, so `length-mismatch` says nothing — which is exactly the
+    // hole this check closes: the file looks measured, and the number is physically impossible. A walkway can
+    // be longer than the crow-flight, because paths bend; it cannot be shorter.
+    const file = patchEdge(base(), 'e-a--j', { metres: 180 })
+    const model = buildGraph(file)
+    expect(model.issues.map((issue) => issue.code)).toEqual(['shorter-than-crow-flight'])
+    const issue = model.issues[0]
+    if (issue === undefined) return expect.fail('a report')
+    expect(issue.severity).toBe('error')
+    expect(issue.subject).toBe('e-a--j')
+    expect(issue.message).toContain('180 m')
+    expect(issue.message).toContain('190 m')
+    expect(issue.message).toContain('cannot be shorter than the crow-flight')
+    expect(model.ok).toBe(false)
+    // And the edge stays in the graph: the report is not a deletion. The coordinates are the thing a builder
+    // can trust, so the map still draws the walkway at its real length while the number is fixed.
+    expect(model.summary.edgeCount).toBe(buildGraph(base()).summary.edgeCount)
+  })
+
+  it('allows a shortfall the drawing itself could not resolve', () => {
+    // 189.9 against 190 is inside `deriveMetres`' rounding to a tenth of a metre, so it is a rounding
+    // artifact and not a lie. Pinned from below the boundary rather than on it, so moving the band has to be
+    // a decision — the same rule as the 15% warning above it.
+    expect(validateCampusFile(patchEdge(base(), 'e-a--j', { metres: 189.9 })).issues).toEqual([])
+  })
+
+  it('measures that band in ground metres, so a coarse scale buys more slack', () => {
+    // At 0.12 px/m one pixel of coordinate rounding is 8.3 m of ground, so a shortfall that size is the
+    // resolution of the plan, not an error…
+    const coarse = (metres: number): Fixture => ({
+      ...base(),
+      canvas: { width: 1000, height: 600, pixelsPerMetre: 0.12 },
+      edges: base().edges.map((edge) => (edge.id === 'e-a--j' ? { ...edge, metres } : edge)),
+    })
+    expect(validateCampusFile(coarse(1575)).issues.filter((issue) => issue.code === 'shorter-than-crow-flight')).toEqual([])
+    // …and 13.3 m of it is not. 1583.3 is the derived length at this scale, so the two cases differ only in
+    // how the tolerance is computed: that is the point of the pair.
+    expect(validateCampusFile(coarse(1570)).issues.some((issue) => issue.code === 'shorter-than-crow-flight')).toBe(true)
+  })
+
   it('leaves a plausible hand-measured length alone', () => {
     // 210 against 190 derived is 10.5%, inside the 15% tolerance: pinned from below the boundary
     // rather than on it, so a tolerance change has to be a decision.

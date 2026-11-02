@@ -121,7 +121,9 @@ A walkway segment. Undirected unless `oneWay` is set, in which case it is passab
 `metres` is derived from the endpoints as `hypot(dx, dy) / pixelsPerMetre`, rounded to one decimal,
 when the file omits it. An explicit `metres` always wins: a path that switchbacks over a stream is
 longer than the straight line between its endpoints, and the person who measured it is right. If a
-stated length differs from the derived one by more than 15%, the validator warns `length-mismatch`
+stated length differs from the derived one by more than 15%, the validator warns `length-mismatch`; if it
+falls *below* the straight line between the endpoints it is an error, `shorter-than-crow-flight`, because the
+two directions of that gap do not mean the same thing — see the matrix below.
 and quotes both numbers — that gap usually means a node was moved and its edges were not re-measured.
 
 ### `attrs`
@@ -210,6 +212,7 @@ the app cannot disagree, because they are the same function.
 | `missing-zone` | warning | Node or building with no `zone`. |
 | `place-to-place` | warning | Both endpoints are non-junctions. Legal — a plaza between two buildings is real — but a route through it gets a vague turn instruction, and a *chain* of them usually means a junction is missing. |
 | `length-mismatch` | warning | Stated `metres` more than 15% from the derived length. |
+| `shorter-than-crow-flight` | error | Stated `metres` below the straight-line distance between the endpoints by more than one tenth of a metre — or one pixel's diagonal at a coarse `pixelsPerMetre`, whichever is larger. A walkway longer than the crow-flight is a path that bends; a walkway *shorter* than it is not a walkway. |
 | `non-simple-ring` | warning | Footprint or surface ring that crosses itself. |
 
 Every message reads `` <severity>: <code>: <what is wrong> [<id to fix>] `` — one line per issue, the

@@ -15,7 +15,7 @@ to keep that true.
 | node `x`,`y`, building `footprint`, surface `ring` | world units = SVG user units, origin top-left, +y down |
 | `canvas.width/height` | the viewBox, i.e. the drawing extent |
 | `canvas.pixelsPerMetre` | the one bridge to reality: `metres = worldUnits / pixelsPerMetre` |
-| edge `metres` | distance along the walkway; omitted ⇒ derived from the two nodes and the scale |
+| edge `metres` | distance along the walkway; omitted ⇒ derived from the two nodes and the scale. Stating it is opt-in, and a stated length *below* the straight line between its ends is an error (`shorter-than-crow-flight`) — a path may bend, it may not shrink |
 
 `metadata.scaleSource` records *how* the scale was obtained (`none`, `two-point-calibration`
 from the map editor, `survey-plan`, `gis`). Distances are only as trustworthy as that field,
@@ -58,7 +58,7 @@ function over them, not a new algorithm.
 trigger. In short:
 
 Errors, i.e. build-breaking: unreadable `schemaVersion`, a missing top-level block, duplicate ids
-(anywhere in the file, one flat name space), unknown node/edge ids, self-loops, `metres <= 0` or
+(anywhere in the file, one flat name space), unknown node/edge ids, self-loops, a stated `metres` shorter than the crow-flight, `metres <= 0` or
 non-finite coordinates, `crowd` outside 0–1, a building with no reachable entrance, an empty graph.
 
 Warnings, i.e. printed but passable: isolated nodes, a node outside the canvas, a disconnected
