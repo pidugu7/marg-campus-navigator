@@ -1,9 +1,11 @@
 # Algorithms &amp; data structures
 
-One section per required item. Each is implemented in `src/engine/structures/`, specified in a
-collocated `*.spec.ts`, and used by at least one feature — so that "we wrote it" and "we needed
-it" are both true. Sections 1–5 are written; 6–11 are the plan from Phase 0, kept here so every
-algorithm has its claim stated *before* it is implemented.
+One section per required item. Each is implemented in `src/engine/structures/` or
+`src/engine/algorithms/`, specified in a collocated `*.spec.ts`, and used by at least one feature — so that
+"we wrote it" and "we needed it" are both true. Sections 1–5 are Phase 1, and 8, 11 and 12 are Phase 3 so
+far; 6, 7, 9 and 10 are the plan from Phase 0, kept here so every algorithm has its claim stated *before* it
+is implemented (the claims are at the end, still in the words they were written in, with the checkpoint that
+owes each test).
 
 | # | Structure / algorithm | Module | Used for | Status |
 | --- | --- | --- | --- | --- |
@@ -12,16 +14,21 @@ algorithm has its claim stated *before* it is implemented.
 | 3 | union-find | `structures/union-find.ts` | components at build time, closure resilience | **done** (Phase 1) |
 | 4 | LRU cache | `structures/lru-cache.ts` | memoised route results | **done** (Phase 1) |
 | 5 | adjacency graph | `structures/graph.ts` | the `GraphIndex` every algorithm reads | **done** (Phase 1) |
-| 6 | BFS | `algorithms/bfs.ts` | hop-shortest path, k-hop reachability | pending (Phase 3) |
-| 7 | DFS | `algorithms/dfs.ts` | cycle check, articulation points / bridges | pending (Phase 3) |
-| 8 | Dijkstra | `algorithms/dijkstra.ts` | exact weighted shortest path | pending (Phase 3) |
-| 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | pending (Phase 3) |
+| 6 | BFS | `algorithms/bfs.ts` | hop-shortest path, k-hop reachability | pending (Phase 3, cp2) |
+| 7 | DFS | `algorithms/dfs.ts` | cycle check, articulation points / bridges | pending (Phase 3, cp2) |
+| 8 | Dijkstra | `algorithms/dijkstra.ts` | exact weighted shortest path | **done** (Phase 3, cp1) |
+| 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | pending (Phase 3, cp2) |
 | 10 | cost profiles | `routing/cost.ts` | fastest / shaded / step-free / quiet | pending (Phase 4) |
-| 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | pending (Phase 3) |
+| 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | legs and wording **done** (cp1); the simplification pass is cp3 |
+| 12 | geometric measure | `geo/measure.ts` | compass words, turn angles, and the A\* scale | **done** (Phase 3, cp1) |
 
 Every spec is seeded (`src/engine/__tests__/helpers.ts`, mulberry32, no `Math.random` anywhere in
 `src/engine`), and each property test compares against a deliberately naive reference model rather
-than against a second copy of the implementation. 95 tests, 98.9% line coverage over the engine.
+than against a second copy of the implementation. Phase 3 grows the oracle set: `bellmanFord`,
+`floydWarshall`, `minimumHopCounts` and `indexOfGraph` (one place where a generated graph becomes a
+sealed `AdjacencyGraph`, so the reference and the implementation are provably arguing about the same
+edges). Coverage is reported per module in `npm run test:coverage`; the two arms the report still shows
+open in `search-common.ts` are listed as unreachable-by-construction in §8.
 
 ---
 
@@ -47,13 +54,19 @@ pop O(log n) · peek O(1) · drain O(n log n) · memory O(n) for one array.
 An *indexed* heap keeps a `key → position` map and sifts an entry up when its priority drops: no
 duplicate entries, O(log n) updates, but the structure has to know the caller's identity space and
 every `push`/`pop`/`swap` pays for keeping that map in step. This engine uses **lazy deletion**
-instead — push a fresh entry per successful relaxation, and on pop discard it when
-`popped.distance > best[popped.id]`. The heap stays a pure comparator container that Dijkstra and
+instead — push a fresh entry per successful relaxation, and on pop discard an entry whose vertex has
+already been settled. The heap stays a pure comparator container that Dijkstra and
 A\* share unchanged, at the cost of up to O(E) entries instead of O(V). For a campus graph of a
-few thousand edges that ceiling is irrelevant, and the skip is two readable lines in
-`dijkstra.ts`, whereas a position map is exactly where a bug hides. Phase 4's benchmark reports
-pushes-per-query next to expanded nodes, so the duplication factor is a measured number rather
-than a claim.
+few thousand edges that ceiling is irrelevant, and the skip is one readable line, whereas a position
+map is exactly where a bug hides. Phase 4's benchmark reports pushes-per-query next to expanded nodes,
+so the duplication factor is a measured number rather than a claim.
+
+**Correction, from mutation testing in Phase 3.** This section originally promised the other textbook
+form of the skip — `popped.distance > best[popped.id]`. Both were implemented, then each was removed in
+turn with the suite as judge: the `best` comparison left every engine test passing (nothing in the
+project could observe it), because under non-negative costs the cheaper entry always pops first, so a
+superseded entry can only surface *after* its vertex settled, which the membership test already
+swallows. The load-bearing line is the settled-set check, and `search-common.ts` keeps that one alone.
 
 **What the specs pin.** Order audited after *every* operation across 60 interleaved sequences of
 200 steps; `drain()` vs `Array.sort` on 500 random arrays; the multiset conserved over 5 000
@@ -244,19 +257,161 @@ and the highlight-on-select feature would have quietly missed half the incident 
 edge in both endpoints' incident lists, while `#out` keeps direction, is the fix;
 `stores an undirected edge twice and a one-way edge once` pins it.
 
-## 6–11. Graph algorithms (pending)
+## 8. Dijkstra — `algorithms/dijkstra.ts`, on `algorithms/search-common.ts`
 
-Claims to be tested, stated now so they cannot be quietly softened later:
+**Why it exists.** Every "shortest route" claim in the app reduces to this: with a cost function that is
+finite and positive, the settled set is exactly the set of vertices whose distance is final, and the first
+time the destination enters it, the route is optimal. `src/engine/routing` (Phase 4) will call this
+function; nothing else in the app computes a route.
 
-- **BFS** is hop-shortest, and equals Dijkstra when every weight is 1.
-- **DFS** finds articulation points; every reported cut vertex must actually disconnect the graph
-  when removed, verified by rebuilding without it.
-- **Dijkstra** matches a brute-force oracle on small random graphs and settles each node once under
-  non-negative costs.
-- **A\*** returns the same *cost* as Dijkstra on every fixture pair while expanding **fewer or
-  equal** vertices. If A\* is not cheaper on this map, the heuristic is wrong — and that test is
-  what will say so.
-- Turn-by-turn output must be replayable: following the emitted steps reproduces the node path.
+**Interface.** `dijkstra(index, from, to, options?)` where `index` is the read-only `GraphIndex`, and
+`options` is `{ cost?, blockedEdges?, profile?, trace?, now? }`. Returns `RouteResult` — `RouteFound` or
+`RouteNotFound` — and never throws for any input that satisfies `GraphIndex`, including a hand-built index
+whose adjacency names edges the snapshot has lost. `blockedEdges` is a `ReadonlySet<EdgeId>` read on every
+relaxation; **the graph is never cloned to apply a closure**, which is the same decision `buildComponents`
+made in Phase 1 for the same reason.
+
+**Invariant.** `expanded` grows only by vertices whose cost will never improve, and `costSoFar` is
+monotone decreasing per vertex. Two consequences the specs use: `exploredOrder` contains every vertex at
+most once, and `expanded ≤ |V|`.
+
+**Complexity.** O((V + E) log V) time with this heap and lazy deletion (≤ E pushes, ≤ E pops, each
+O(log E)), O(V) for the records plus the heap's own O(E) entries.
+
+**Worked example**, on the fixture `crossing()`: a square of four 100 m walkways `a-b-c-d-a` with a 250 m
+diagonal `a-c`, routed `a` → `c`. The frontier is written as `vertex@cost`, and each row is one pop.
+
+| pop | drawn | why | offers accepted | frontier after | explored |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `a@0` | the seed, and the only vertex final without a comparison | `b@100`, `d@100`, `c@250` | `b@100 d@100 c@250` | `a` |
+| 2 | `b@100` | ties with `d` at 100; the comparator breaks the tie on id, `b < d` | `c@200` beats `c@250`, so `c` is re-offered and the 250 entry is left in the heap as a receipt | `d@100 c@200` | `a b` |
+| 3 | `d@100` | cheapest remaining | `c@200` via `cd` is *not* cheaper than the record, so it is refused at the door | `c@200` | `a b d` |
+| 4 | `c@200` | the destination — return immediately | — | empty | `a b d c` |
+
+`frontierSnapshots` is that fourth column, row by row: `[[], ["d","c"], ["c"], []]`. The answer is 200 m
+over two edges, while the *fewest walkways* answer is the 250 m diagonal — which is why BFS (below) is not
+interchangeable with this, and why the result carries both `cost` and `metres`.
+
+**What the specs pin.** The pinned cases: a line, the square where the direct edge loses, a genuine 200-vs-200
+tie (same answer every run, because the tie-break is the comparator and not the insertion order), a one-way
+walkway that can be followed in one direction only, a closure that forces a detour, a closure that strands
+the destination (`disconnected`, and it names how many walkways were closed), two components with nothing
+blocked (refused *before* searching, naming both component indices), origin equal to destination (a route of
+zero, and one expansion), and the five refusal codes in the order the ladder asks them. The property cases:
+**200 seeded random graphs**, four sampled sources each, every vertex as target, compared to `bellmanFord`
+under the *same* closure set, with every returned path re-walked edge by edge against the index — adjacency
+must agree, no closed edge may appear, direction must be respected, `metres` must equal the sum of the edges
+walked, the step list must replay onto the same vertices, and no vertex may be settled twice. Then 30 tiny
+graphs against `floydWarshall` all-pairs (a matrix algorithm shares no code with either search), and 25
+graphs checked for the symmetry an undirected campus must have.
+
+**Unreachable by construction, so left open on purpose** (both arms, one line each):
+`search-common.ts:316` `if (parent === undefined) break` inside the parent walk — `#parent` is written for
+every settled vertex other than the origin, and the walk starts at a settled vertex, so a missing parent
+would mean the run contradicted its own bookkeeping; and `search-common.ts:338` the `?? this.#from` label
+fallback in the zero-length case, which `checkEndpoints()` has already proven exists; and
+`search-common.ts:370` the `0` the offer comparator returns for two offers with the same priority *and* the
+same id, which `offer()` makes impossible (a re-offer must be strictly cheaper to be kept at all). It stays
+because a comparator that never answers `0` is not a total order, and `MinHeap.isHeapOrdered()` audits `<=`. Both are typed that way
+because `GraphIndex.node()` and `Map.get()` answer `undefined` for *any* index, and the alternative was an
+assertion or a cast that says the same thing less honestly.
+
+---
+
+## 11. Turn-by-turn — `algorithms/path-utils.ts` (checkpoint 1 half)
+
+**Why it exists.** A path is a list of vertex ids. A walker experiences a list of *corners*. Between those two
+representations sits everything that makes a directions pane worth reading, and it is pure geometry plus a
+lookup: no algorithm, no policy, so it is testable without a graph search at all.
+
+**Interface.** `routeLegs(index, nodeIds, edgeIds)` groups a path into `RouteLeg`s, cutting wherever
+`turnBetween` exceeds ±15°; `stepsFromLegs(legs)` turns legs into `RouteStep`s; `stepsReplay(steps)` folds a
+step list back into vertex ids; `turnDirectionFor(degrees)` maps a signed angle onto the nine-word
+`TurnDirection` union. A search uses all three and returns a `RouteFound` whose `steps` a human can follow —
+which is why the union has `steps` at all, and why this half exists before the searches do.
+
+**Invariant.** `stepsReplay(result.steps)` equals `result.nodeIds`, on every pinned fixture and every random
+graph in the sweep. If that ever fails, the directions pane is lying about the route the map is drawing.
+
+**Found while testing.** The first version named a leg's landmark by the rule "far end, unless this is a
+turning leg that does not reach the destination", which quietly dropped the corner from the *final* turn — the
+sentence printed "Bear left, your destination" and never said where to turn. The rule is now one clause:
+the opening leg is named for where it goes, every other leg for the corner it turns at, and the destination
+is carried by its own suffix. `RouteLeg.reachesDestination` no longer touches naming at all. That fix came
+out of a spec written from a picture in my head of a right-angle bend, which the geometry corrected: `row(30)`
+is a 45° corner.
+
+**Naming decisions worth stating.** `RouteStep.metres` carries the distance and the prose never repeats it
+(one number, one source: the UI appends it). A turning leg is named after the corner it turns at, or after
+nothing if that vertex has no label — "Turn left" is a direction, "Turn left at j-7" is not. The opening leg
+is named after where it takes you and prefixed with a compass heading, and says "Set off" instead of inventing
+a heading when the index cannot place a vertex.
+
+**What the specs pin.** `path-utils.spec.ts`: a straight line stored as several segments stays one leg; a
+corner cuts a new leg that *starts* on the vertex you turn at (so legs overlap by one vertex, which is the
+replay convention); a 12-unit offset over 30 is 21.8° and cuts while a 4-unit one does not; four right-angle
+corners in five vertices make four legs, not three; the opening leg is named for its far end and every other
+leg for its corner, and a corner with no label drops the clause instead of printing a vertex id;
+`turnDirectionFor` at each threshold and one hair inside it, mirrored left/right with the U-turn as the one
+bucket that does not mirror; and 120 random graphs where `stepsReplay(stepsFromLegs(routeLegs(...)))` returns
+the path unchanged, with the sum of leg lengths equal to `|path| + |legs| − 1`.
+`dijkstra.spec.ts` asserts the same replay property on routes, not on hand-built vertex lists. 100 %
+statements and branches; the simplification pass that belongs *between* grouping and wording is cp3's.
+
+---
+
+## 12. Geometric measure — `geo/measure.ts`
+
+**Why it exists.** A* needs a number that estimates cost, and the only geometry available to it is a set of
+coordinates whose unit is *not* metres. `canvas.pixelsPerMetre` lives in `src/data`, which the engine may not
+import. So a heuristic written as `Math.hypot(dx, dy)` is a lie about units, and a heuristic that overestimates
+is not a slower Dijkstra — it is a *wrong* one.
+
+**Interface.** `euclidean`, `compassOf` (eight points, +y is south because the map draws downward),
+`turnBetween` (signed degrees, positive to the walker's right, `(-180, 180]`, computed from cross and dot so
+the 360° seam needs no branch), `minCostPerUnit(index, { cost?, blockedEdges? })` and
+`euclideanHeuristic(index, { cost?, blockedEdges?, scale? })`.
+
+**Admissibility, in three lines.** `k` is the minimum of `cost(e) / length(e)` over the edges this run may
+traverse. Any route is a chain of those edges, so it costs at least `k ×` the chain's length. A chain's length
+is at least the straight-line length by the triangle inequality. Hence `k × euclidean` never exceeds the true
+cost, and because `k` is a constant the same argument gives *consistency*, which is what lets the search return
+the moment it settles the destination.
+
+**Complexity.** `minCostPerUnit` is one pass over the edge list, O(E), computed once per query and captured in
+a closure; every `h(a, b)` after that is `k × hypot`, O(1).
+
+**What the specs pin.** The eight compass points at their exact bearings, and 359° wrapping to `north` rather
+than running off the end of the list; the sign of `turnBetween` on a y-down plane, `0` for straight on, `180`
+not `-180` for a reversal; that `minCostPerUnit` is a genuine lower bound on cost-per-unit for *every* edge of
+60 random graphs; that a profile pricing an edge at `Infinity` (or `0`, or `NaN`) cannot drag `k` with it; that
+blocking the cheapest edge *sharpens* the heuristic instead of breaking it; zero-length and dangling edges
+skipped rather than thrown on; and the triangle inequality — consistency — checked through every edge of 40
+graphs with every vertex as target.
+
+**Found while testing (§12).** Two of my own expectations were wrong and the code was right. A "nearly straight"
+case was built by moving the far point 0.001 *sideways* from the corner, which is a 90° turn and the
+implementation said so; and a blocked-edge ratio was expected as `300 / 100` when the drawn length is
+`hypot(100, 10)`, because the point is offset diagonally. Both were fixed in the spec, not in the code, which
+is the outcome a reference model is supposed to have.
+
+---
+
+## 6, 7, 9, 10 — still to come in this phase
+
+Claims already made, still to be tested at the checkpoint named:
+
+- **BFS** (cp2) is hop-shortest, and equals Dijkstra when every weight is 1.
+- **DFS** (cp2) finds articulation points; every reported cut vertex must actually disconnect the graph when
+  removed, verified by rebuilding without it.
+- **A\*** (cp2) returns the same *cost* as Dijkstra on every fixture pair while expanding **fewer or equal**
+  vertices. If A\* is not cheaper on this map, the heuristic is wrong — and that test is what will say so.
+  The same checkpoint ships the case where an *inadmissible* heuristic returns a longer route, so the reason
+  §12 exists is on the record rather than in a footnote.
+- **Cost profiles** (Phase 4) are weight functions, not separate algorithms; `non-positive-cost` is what stops
+  a profile from breaking the invariant in §8.
+
+---
 
 ## Benchmarks (Phase 4)
 

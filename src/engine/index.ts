@@ -13,9 +13,10 @@
  *                 profile, caches results. The only part with policy.
  *   geo/          pure geometry used for weights, heuristics and snapping.
  *
- * Phase 1 ships the five data structures in `structures/`. `algorithms/` (Phase 3) and
- * `routing/` (Phase 4) will consume them through *this* file: a hook may import `@/engine`
- * and nothing else, which is what keeps a UI refactor from discovering deep import paths.
+ * Phase 1 ships `structures/`, Phase 3 ships `algorithms/` and `geo/`, and `routing/` (Phase 4) will consume
+ * both through *this* file: a hook may import `@/engine` and nothing else, which is what keeps a UI refactor
+ * from discovering deep import paths. Note what a search takes — a `GraphIndex`, never a `CampusModel`: the
+ * engine's only window onto a campus is vertices, edges and numbers.
  */
 
 export type * from './types'
@@ -64,3 +65,35 @@ export {
   type NodeInput,
   type ValidateGraphOptions,
 } from './structures/graph'
+
+// --- Phase 3: graph searches, and the geometry they stand on -----------------------------------------
+// The three searches share one run object (`algorithms/search-common.ts`), which is why its *option* types
+// are published and the run itself is not: a caller steers a search, it does not drive its maps.
+export { dijkstra } from './algorithms/dijkstra'
+export {
+  minutesFor,
+  type Expansion,
+  type Offer,
+  type RouteSearchOptions,
+  type SettledVertex,
+} from './algorithms/search-common'
+export {
+  SHARP_WITHIN_DEGREES,
+  SLIGHT_WITHIN_DEGREES,
+  STRAIGHT_WITHIN_DEGREES,
+  routeLegs,
+  stepsFromLegs,
+  stepsReplay,
+  turnDirectionFor,
+  type RouteLeg,
+} from './algorithms/path-utils'
+export {
+  COMPASS_POINTS,
+  compassOf,
+  euclidean,
+  euclideanHeuristic,
+  minCostPerUnit,
+  turnBetween,
+  type CompassPoint,
+  type CostScaleOptions,
+} from './geo/measure'

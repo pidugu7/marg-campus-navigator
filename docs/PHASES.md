@@ -396,3 +396,46 @@ marker plan is measured at all three plate sizes; the plate is `5/4` on a phone 
 only add empty margin above and below a clamped camera; junction dots and the gesture hint are dropped
 under 640 px; every control is a multiple of 4 px (`--space-*`, 32 px buttons, 32 px tap targets, 8 px
 label gap); and the legend is capped at `min(340px, 62%)` so it cannot outwidth the plate it sits on.
+
+### Phase 3, checkpoint 1 — Dijkstra, the shared run, and the geometry A* will stand on
+
+**Code.** `src/engine/algorithms/search-common.ts` (`SearchRun`: the endpoint ladder, the frontier, the
+relaxation rules, the snapshot recorder and the `RouteResult` assembly — one implementation, three
+algorithms), `algorithms/dijkstra.ts` (the ordering rule and nothing else), `algorithms/path-utils.ts`
+(grouping a path into legs and wording them; the simplification pass is cp3's), `geo/measure.ts`
+(`euclidean`, `compassOf`, `turnBetween`, `minCostPerUnit`, `euclideanHeuristic`).
+
+**Contract changes, all of them additive except where noted.** `RouteMetrics` gains
+`frontierSnapshots` (the frontier per settled vertex, index-aligned with `exploredOrder`, for the replay
+overlay) and *moves* `exploredOrder` out of `RouteFound` into `RouteMetrics`, because on a failed search the
+settled set is the reachable set and Phase 6 will draw it. `RouteStep.direction` stops being a free-form
+`string` and becomes the nine-value `TurnDirection` union, which is what removes the `default:` branch from
+the wording switch. `WALKING_SPEED_MPS` is now `Readonly<Record<WeightProfile, number>>`, so a pace lookup is
+total and the `?? 1.4` fallback in the contract spec is gone rather than unreachable. `ENGINE_VERSION` →
+`0.3.0-phase3.algorithms`. The field names the brief asked for are the ones the union already had: *path* is
+`nodeIds`, *distance* is `metres`, *visited order* is `exploredOrder`, *nodes expanded* is `expanded`,
+*time* is `ms`; the mapping is written into `types.ts` above `RouteFound` so the two vocabularies cannot
+drift, and `cost` stays separate from `metres` on purpose (it is the profile-weighted total, which is the
+only number two algorithms can be compared on).
+
+**Tests.** +83 — 26 `search-common`, 21 `geo/measure`, 19 `dijkstra`, 17 `path-utils` — so 166 in
+`src/engine` and **333 in the project** (`npm run check` green: typecheck, lint, 333 tests, build).
+`dijkstra.ts`, `geo/measure.ts` and `algorithms/path-utils.ts` are at **100 % statements *and* branches**;
+`search-common.ts` is 99.1 / 96.2 with its three open arms documented in `ALGORITHMS.md` §8 as
+unreachable-by-construction — and one that started open and *was* reachable (a queue search that drains) got
+a test instead of a footnote. `path-utils.spec.ts` exists because the architecture guard refuses to ship an
+engine module without one — that rule caught my plan to write its spec a checkpoint later, and the right
+answer was to write it now rather than to weaken the guard.
+
+**Method, and what it changed.** The 200-graph sweep compares against `bellmanFord` for every vertex as
+target under the same closure set, and re-walks each returned path edge by edge; 30 tiny graphs go against
+`floydWarshall` as a second, structurally unrelated oracle. Two expectations of mine were wrong and the code
+was right (a "nearly straight" fixture that was really a 90° turn, and a ratio computed against the
+horizontal instead of the diagonal) — both fixed in the spec, recorded in `ALGORITHMS.md` §12.
+Then each of the two lazy-deletion lines was removed in turn: the textbook `cost > best` comparison changed
+nothing across 148 tests, so it is gone, and the settled-set check fails the test named for it, so it stays.
+`ALGORITHMS.md` §1 carries the correction against what Phase 1 claimed there.
+
+**Not in this checkpoint, on purpose.** BFS, A*, DFS (cp2); the simplification pass and full step wording
+(cp3); the route UI (cp4); the result card, the responsive pass and the rest of the docs (cp5). Nothing in
+`src/ui` changed yet, so the map still draws no route.

@@ -158,12 +158,39 @@ export interface RouteRequest {
   readonly algorithm?: AlgorithmName
 }
 
+/**
+ * How the walker's heading changes at the start of a leg.
+ *
+ * Nine values, and they are a total union on purpose: the sentence a step prints is chosen by
+ * switching over this set, so adding a tenth bucket is a compile error at every `switch` rather than a
+ * runtime `undefined` in a directions list. `'stay'` is the degenerate one — origin and destination
+ * the same place — and it exists so that case has a sentence instead of a special-cased empty list.
+ *
+ * Left/right are the walker's own, read from the bearing change; the map's +y axis points *down*, so
+ * the compass words in `geo/measure.ts` translate it before any of these are chosen.
+ */
+export type TurnDirection =
+  | 'straight'
+  | 'slight-left'
+  | 'left'
+  | 'sharp-left'
+  | 'uturn'
+  | 'sharp-right'
+  | 'right'
+  | 'slight-right'
+  | 'stay'
+
 /** One leg of a route, in the words a person walking would use. */
 export interface RouteStep {
   readonly instruction: string
-  /** Cardinal-relative turn: 'straight' | 'slight-left' | 'left' | 'right' | … */
-  readonly direction: string
+  readonly direction: TurnDirection
   readonly metres: number
+  /**
+   * The vertices this step walks through, origin of the leg included and its far end included.
+   * Concatenating the steps (minus the repeated joint) reproduces the node path exactly — a property
+   * `path-utils.spec.ts` checks on every random graph, because directions that cannot be replayed are
+   * decoration.
+   */
   readonly nodeIds: readonly NodeId[]
 }
 
@@ -176,8 +203,36 @@ export interface RouteMetrics {
   readonly ms: number
   /** Served from the LRU route cache rather than recomputed. */
   readonly cached: boolean
+  /**
+   * Vertices settled, in order. On a failure this is the reachable set — the most useful half of the bad
+   * news, which is why it lives here rather than only in {@link RouteFound}: Phase 6 draws "everything you
+   * can get to from the south annexe" out of a result that has no route in it.
+   */
+  readonly exploredOrder: readonly NodeId[]
+  /**
+   * The frontier as it stood the moment each vertex was drawn off it, index-aligned with
+   * {@link RouteFound.exploredOrder}: snapshot `k` lists the candidates still competing when
+   * `exploredOrder[k]` was settled. One array per step of the search, which is what makes the
+   * "watch it search" overlay and Phase 5's replay possible at all: without it there is nothing to
+   * animate but the answer.
+   *
+   * Snapshot *contents* are sorted by (priority, id) for the heap searches and kept in discovery order
+   * for BFS, so two runs of the same search on the same graph produce byte-identical arrays. They are
+   * empty when a caller asks for `trace: false` — the option Phase 4's benchmark uses to price the
+   * search without the record-keeping.
+   */
+  readonly frontierSnapshots: readonly (readonly NodeId[])[]
 }
 
+/**
+ * A route a person could walk.
+ *
+ * The vocabulary, once, because two sets of names circulate for the same object: the *search* words are
+ * `expanded` (vertices settled), `ms` (elapsed whole milliseconds) and `exploredOrder` (vertices settled,
+ * in order); the *walk* words are `nodeIds` (the path), `edgeIds` (the walkways that carry it) and
+ * `metres` (its length). `cost` is neither — it is the profile-weighted total the search minimised, which
+ * is the number two algorithms must agree on and the only one that can be compared across profiles.
+ */
 export interface RouteFound extends RouteMetrics {
   readonly ok: true
   readonly nodeIds: readonly NodeId[]
@@ -191,8 +246,6 @@ export interface RouteFound extends RouteMetrics {
   /** Minutes at the profile's assumed walking pace. */
   readonly minutes: number
   readonly steps: readonly RouteStep[]
-  /** Vertices settled, in order — drives the "watch it search" overlay. */
-  readonly exploredOrder: readonly NodeId[]
 }
 
 export type RouteFailureReason =

@@ -303,3 +303,147 @@ export class LruModel {
     return this.#entries.length
   }
 }
+
+// --- Phase 3: oracles for the searches ---------------------------------------------------------------
+//
+// Every function below answers a question by definition rather than by cleverness. Bellman-Ford relaxes
+// every arc |V| − 1 times; Floyd–Warshall tries every vertex as an intermediate for every pair; the hop
+// count is a BFS with no priority at all. None of them reconstructs *which* path it found, because a path is
+// not unique when costs tie — the claims that can be pinned are the number, the reachability, and the fact
+// that the engine's own path costs that number.
+
+import { DEFAULT_EDGE_ATTRIBUTES } from '../constants'
+import { AdjacencyGraph } from '../structures/graph'
+import type { EdgeAttributes } from '../types'
+
+/** An arc with its weight already resolved: undirected edges appear twice, one-way edges once. */
+export interface Arc {
+  readonly from: string
+  readonly to: string
+  readonly weight: number
+}
+
+export interface OracleOptions {
+  /** How much an edge costs. Defaults to its metres; pass `() => 1` to ask for hop counts instead. */
+  readonly weight?: (edge: GeneratedEdge) => number
+  /** Edge ids closed for this query, matched against the same ids the engine was given. */
+  readonly blockedEdges?: ReadonlySet<string>
+}
+
+export function arcsOf(graph: GeneratedGraph, options: OracleOptions = {}): Arc[] {
+  const weight = options.weight ?? ((edge: GeneratedEdge) => edge.metres)
+  const blocked = options.blockedEdges
+  const arcs: Arc[] = []
+  for (const edge of graph.edges) {
+    if (blocked?.has(edge.id) === true) continue
+    const w = weight(edge)
+    arcs.push({ from: edge.from, to: edge.to, weight: w })
+    if (!edge.oneWay) arcs.push({ from: edge.to, to: edge.from, weight: w })
+  }
+  return arcs
+}
+
+/**
+ * Single-source shortest paths, by relaxation over every arc, |V| − 1 times.
+ *
+ * O(V·E) and slow on purpose. The early exit when a pass changes nothing is the one optimisation kept, since
+ * it cannot change an answer — and a reference that is *also* naive about its running time would make the
+ * "Dijkstra is faster" claim in the benchmark impossible to interpret.
+ */
+export function bellmanFord(from: string, graph: GeneratedGraph, options: OracleOptions = {}): Map<string, number> {
+  const distance = new Map<string, number>()
+  for (const node of graph.nodes) distance.set(node.id, node.id === from ? 0 : Number.POSITIVE_INFINITY)
+  const arcs = arcsOf(graph, options)
+  for (let pass = 0; pass < graph.nodes.length - 1; pass++) {
+    let changed = false
+    for (const arc of arcs) {
+      const here = distance.get(arc.from) ?? Number.POSITIVE_INFINITY
+      const there = distance.get(arc.to) ?? Number.POSITIVE_INFINITY
+      if (here + arc.weight < there) {
+        distance.set(arc.to, here + arc.weight)
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+  return distance
+}
+
+/**
+ * All-pairs shortest paths, by the three-loop Floyd–Warshall.
+ *
+ * Answers the question a single-source oracle cannot: that a pair with no route is reported as
+ * `Infinity` by both, and that the matrix is symmetric for an undirected graph. O(V³) — which at the sizes
+ * these specs use (a dozen vertices) is a fraction of a millisecond and a second independent opinion.
+ */
+export function floydWarshall(graph: GeneratedGraph, options: OracleOptions = {}): (from: string, to: string) => number {
+  const ids = graph.nodes.map((node) => node.id)
+  const distance = new Map<string, number>()
+  const at = (from: string, to: string): number => distance.get(`${from}\u0000${to}`) ?? Number.POSITIVE_INFINITY
+  const put = (from: string, to: string, value: number): void => {
+    distance.set(`${from}\u0000${to}`, value)
+  }
+  for (const from of ids) {
+    for (const to of ids) put(from, to, from === to ? 0 : Number.POSITIVE_INFINITY)
+  }
+  for (const arc of arcsOf(graph, options)) {
+    put(arc.from, arc.to, Math.min(at(arc.from, arc.to), arc.weight))
+  }
+  for (const via of ids) {
+    for (const from of ids) {
+      for (const to of ids) {
+        const through = at(from, via) + at(via, to)
+        if (through < at(from, to)) put(from, to, through)
+      }
+    }
+  }
+  return at
+}
+
+/** Minimum number of *edges* from `from` to every reachable vertex, by an unweighted BFS. */
+export function minimumHopCounts(from: string, graph: GeneratedGraph, options: OracleOptions = {}): Map<string, number> {
+  const hops = new Map<string, number>([[from, 0]])
+  const arcs = arcsOf(graph, options)
+  let frontier = [from]
+  while (frontier.length > 0) {
+    const next: string[] = []
+    for (const current of frontier) {
+      for (const arc of arcs) {
+        if (arc.from !== current || hops.has(arc.to)) continue
+        hops.set(arc.to, (hops.get(current) ?? 0) + 1)
+        next.push(arc.to)
+      }
+    }
+    frontier = next
+  }
+  return hops
+}
+
+/**
+ * A sealed `AdjacencyGraph` over a generated graph, with every attribute defaulted.
+ *
+ * The searches are written against `GraphIndex`, so the oracles above and the engine below must be handed the
+ * *same* edges: this is the one place a `GeneratedGraph` becomes a graph, which is what makes "the reference
+ * and the implementation disagree" evidence rather than a difference in fixture setup.
+ */
+export function indexOfGraph(
+  graph: GeneratedGraph,
+  attributes: Partial<EdgeAttributes> = {},
+): AdjacencyGraph {
+  const builder = new AdjacencyGraph()
+  for (const node of graph.nodes) builder.addNode({ id: node.id, x: node.x, y: node.y })
+  for (const edge of graph.edges) {
+    // Self-loops and duplicate edges are in the generator's output on purpose. `addEdge` refuses the first and
+    // allows the second, and a search that is only correct on a simple graph is not correct.
+    if (edge.from === edge.to) continue
+    builder.addEdge({
+      id: edge.id,
+      from: edge.from,
+      to: edge.to,
+      metres: edge.metres,
+      oneWay: edge.oneWay,
+      attributes: { ...DEFAULT_EDGE_ATTRIBUTES, ...attributes },
+    })
+  }
+  return builder.seal()
+}

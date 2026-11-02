@@ -76,9 +76,12 @@ describe('engine public surface', () => {
       cost: 95,
       metres: 95,
       hops: 2,
-      minutes: 95 / (WALKING_SPEED_MPS['fastest'] ?? 1.4) / 60,
+      minutes: 95 / WALKING_SPEED_MPS.fastest / 60,
       steps: [],
       exploredOrder: ['gate-1', 'jquad', 'lib'],
+      // Index-aligned with `exploredOrder`: what was still competing when each vertex was drawn off the
+      // frontier. The last frame is empty because the search stopped the moment it settled the destination.
+      frontierSnapshots: [['jquad'], ['lib'], []],
     }
     expect(result.ok && result.hops).toBe(2)
   })
