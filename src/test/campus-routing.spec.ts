@@ -16,7 +16,19 @@
  * turn-by-turn sentence: that is `src/ui`'s contract and Phase 3's checkpoint 4.
  */
 import { describe, expect, it } from 'vitest'
-import { aStar, bfs, depthFirstRoute, dijkstra, type GraphIndex, type NodeId, type RouteFound, type RouteResult } from '@/engine'
+import {
+  MIN_INSTRUCTION_METRES,
+  aStar,
+  bfs,
+  depthFirstRoute,
+  dijkstra,
+  routeLegs,
+  simplifyLegs,
+  type GraphIndex,
+  type NodeId,
+  type RouteFound,
+  type RouteResult,
+} from '@/engine'
 import { buildGraph, campus } from '@/data'
 
 /**
@@ -133,6 +145,30 @@ describe('every search, over every pair of named places on the campus', () => {
         }
       }
     }
+  })
+
+  it('gives the directions pass nothing to fold, and says why', () => {
+    // `simplifyLegs` folds a leg shorter than `MIN_INSTRUCTION_METRES` into its neighbour. The shortest walkway
+    // in this file is four times that, so the fold is a no-op on all 380 routes — measured, not assumed. The
+    // pass is not dead code: it exists for the traced plan Phase 7's editor will import, where an entrance
+    // stub is 6 m and every such stub would otherwise buy the walker a sentence. This test is the pair to that
+    // claim: if a future edit adds short edges, the fold starts firing and the *counts* below change together;
+    // if the fold ever eats a normal route, this fails instead of the screenshot looking slightly short.
+    const shortest = model.edges.reduce((best, edge) => Math.min(best, edge.metres), Number.POSITIVE_INFINITY)
+    expect(shortest).toBeGreaterThanOrEqual(MIN_INSTRUCTION_METRES * 3)
+    let steps = 0
+    for (const from of points) {
+      for (const to of points) {
+        if (from.id === to.id) continue
+        const result = dijkstra(index, from.id, to.id)
+        if (!result.ok) continue
+        const before = routeLegs(index, result.nodeIds, result.edgeIds)
+        expect(simplifyLegs(before)).toEqual(before)
+        expect(result.steps).toHaveLength(before.length)
+        steps += before.length
+      }
+    }
+    expect(steps).toBeGreaterThan(0)
   })
 
   it('measures the walk in the units a person cares about', () => {

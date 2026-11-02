@@ -24,6 +24,7 @@ export {
   COST_EPSILON,
   DEFAULT_EDGE_ATTRIBUTES,
   ENGINE_VERSION,
+  MIN_INSTRUCTION_METRES,
   MIN_SEGMENT_METRES,
   WALKING_SPEED_MPS,
 } from './constants'
@@ -94,6 +95,7 @@ export {
   SLIGHT_WITHIN_DEGREES,
   STRAIGHT_WITHIN_DEGREES,
   routeLegs,
+  simplifyLegs,
   stepsFromLegs,
   stepsReplay,
   turnDirectionFor,

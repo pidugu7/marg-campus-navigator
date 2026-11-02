@@ -536,3 +536,38 @@ directory and asserts membership in both scanned sets, so teaching `isTest` abou
 generalisation) would fail here instead of quietly exempting the engine's support modules from the "no backend"
 and "no platform globals" rules. It joins *widens the framework exemption to the engine's test directory, and no
 further*; the architecture guard is now 14 tests.
+### Phase 3, checkpoint 3 — the fold between the geometry and the words
+
+**What landed.** `simplifyLegs(legs, { minLegMetres? })` in `algorithms/path-utils.ts`, wired into
+`SearchRun.found()` *between* `routeLegs` and `stepsFromLegs`; `MIN_INSTRUCTION_METRES = 20` in
+`constants.ts` (and on the barrel, see below); 9 new tests in `path-utils.spec.ts` (17 → 27) covering the fold
+and the `MIN_SEGMENT_METRES` floor that `minLegMetres: 0` cannot switch off; a quarter-degree sweep of every turn
+bucket from −180° to 180° against a table derived from the exported thresholds, with eight spelled-out
+straddles at 15 / 60 / 135 / 165; and a replay-of-steps sweep in `search-parity.spec.ts` that runs **all four
+searches × 60 seeded graphs × sampled pairs** on three properties at once (the replay, one sentence per hop at
+most, and metres that add up within the tenths the legs round to).
+
+**The rule, in one sentence.** A leg under the threshold is absorbed into the leg it was reached through and
+the *survivor's* record — `direction`, `compass`, `landmark` — is copied untouched; a short opening leg folds
+forward instead; the joint is counted once so `nodes = edges + 1` survives. Nothing composes a sentence and
+nothing re-derives a heading, which is what lets the pass sit between the two halves without either noticing,
+and why "the wording is never rewritten by simplification" is a structural claim rather than a hope.
+
+**Measured on this campus: the fold changes nothing, on purpose.** 1 404 legs from `routeLegs`, 1 404 out of
+`simplifyLegs`, 0 of 380 pairs altered — the shortest walkway in `campus.json` is 80 m, four times the
+threshold. `src/test/campus-routing.spec.ts` now asserts both halves (per-pair identity of the leg list, and the
+3× floor on the shortest edge), so the pass cannot quietly start eating normal routes and cannot quietly have
+been needed all along. The numbers that came out of the same sweep are worth keeping: **3.69** sentences per
+route by A\* or BFS, **6.91** by depth-first, **10** on the longest (`Research Labs → Hostel Block 2`).
+
+**One bug the barrel caught me making.** `MIN_INSTRUCTION_METRES` went into `constants.ts` and not into
+`src/engine/index.ts`, and the test that read it through `@/engine` got `undefined` — which `tsc -p
+tsconfig.app.json` cannot see, because that project excludes `src/test`. It surfaced as `expected 80 to be
+greater than or equal to NaN` in a red test, not as a compile error. The lesson is the same one cp1 wrote down
+about `tsconfig.test.json`: **`tsconfig.app.json` is blind to `src/test`, and only `tsc -b` (what `npm run
+check` runs) reads the whole picture** — so a checkpoint that touches `src/test` is not verified by the faster
+command. The barrel comment in `index.ts` already says a missing export means the module is missing an API; this
+time it meant the barrel was missing a name, and the runtime was the one that noticed.
+
+**Not in this checkpoint, on purpose.** The route UI (cp4); the result card, the responsive pass and the rest of
+the docs (cp5).

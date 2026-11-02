@@ -12,7 +12,7 @@
  */
 import { COST_EPSILON, WALKING_SPEED_MPS } from '../constants'
 import { MinHeap } from '../structures/min-heap'
-import { routeLegs, stepsFromLegs } from './path-utils'
+import { routeLegs, simplifyLegs, stepsFromLegs } from './path-utils'
 import type {
   AlgorithmName,
   EdgeCost,
@@ -335,7 +335,10 @@ export class SearchRun {
       edgeIds.unshift(parent.edgeId)
       cursor = parent.via
     }
-    const legs = routeLegs(this.#index, nodeIds, edgeIds)
+    // `simplifyLegs` sits here rather than inside either half so that the geometry stays honest (every real
+    // corner is still a cut) while the *instructions* stay readable. The option to skip it is deliberately
+    // absent: a route whose step list depends on a flag is two sources of truth for one screen.
+    const legs = simplifyLegs(routeLegs(this.#index, nodeIds, edgeIds))
     const found: RouteFound = {
       ok: true,
       nodeIds,

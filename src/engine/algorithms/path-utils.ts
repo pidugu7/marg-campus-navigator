@@ -11,6 +11,7 @@
  * The invariant this file earns its place with is {@link stepsReplay}: **the steps must replay the path**, and
  * it is checked on every random graph the specs generate. Directions that cannot be walked are decoration.
  */
+import { MIN_INSTRUCTION_METRES, MIN_SEGMENT_METRES } from '../constants'
 import { compassOf, turnBetween, type CompassPoint } from '../geo/measure'
 import type { EdgeId, GraphIndex, GraphNode, NodeId, RouteStep, TurnDirection } from '../types'
 
@@ -174,6 +175,67 @@ export function stepsFromLegs(legs: readonly RouteLeg[]): readonly RouteStep[] {
       nodeIds: leg.nodeIds,
     }
   })
+}
+
+/**
+ * Fold the legs too short to be worth a sentence into the leg they were reached through.
+ *
+ * {@link routeLegs} cuts a leg at every corner that turns by 15° or more, and it is right to: that is the
+ * geometry. But a 6 m stub between two long stretches produces "Turn right at the cycle stand" followed by
+ * "Turn left at the lamp post" for fourteen seconds of walking, and a walker reading that in the moment loses
+ * the turn that matters. So the cut stays where the geometry put it and the *instruction* is what gets folded.
+ *
+ * **The rule, and it is one rule.** A leg under `minLegMetres` is absorbed into the leg before it, and the
+ * absorbing leg's own record survives unchanged — its `direction`, its `compass`, its `landmark`. Nothing here
+ * composes a sentence and nothing re-derives a heading: the choice is only "which vertex list and which length
+ * this step carries", which is why this pass can sit *between* the geometry half and the wording half without
+ * either noticing. A short **opening** leg has nothing to fold into, so it folds forward instead and the
+ * merged step keeps the first stretch's heading — "Head north-east to the archive" is still true of a walk that
+ * begins with a bend; it is just not worth stopping for.
+ *
+ * `MIN_SEGMENT_METRES` (0.5 m) is folded regardless of `minLegMetres`, because a leg that short is two nodes at
+ * the same place and its turn is arithmetic noise, not a corner. `pass` is a single left-to-right sweep plus at
+ * most one forward fold: it terminates by construction, and it is *not* iterated to a fixpoint — one pass is
+ * what makes "the turn the walker was told about survives" provable rather than hopeful.
+ */
+export function simplifyLegs(
+  legs: readonly RouteLeg[],
+  options: { readonly minLegMetres?: number } = {},
+): readonly RouteLeg[] {
+  if (legs.length < 2) return legs
+  const threshold = Math.max(MIN_SEGMENT_METRES, options.minLegMetres ?? MIN_INSTRUCTION_METRES)
+  const worthASentence = (leg: RouteLeg): boolean => leg.metres >= threshold
+
+  const out: RouteLeg[] = []
+  for (const leg of legs) {
+    const previous = out[out.length - 1]
+    if (previous !== undefined && !worthASentence(leg)) {
+      out[out.length - 1] = absorb(previous, leg)
+      continue
+    }
+    out.push(leg)
+  }
+  const first = out[0]
+  const second = out[1]
+  if (out.length > 1 && first !== undefined && second !== undefined && !worthASentence(first)) {
+    out.splice(0, 2, absorb(first, second))
+  }
+  return out
+}
+
+/** `absorbed`'s vertices appended to `survivor`'s; the shared joint counted once, so a leg keeps `edges + 1` nodes. */
+function absorb(survivor: RouteLeg, absorbed: RouteLeg): RouteLeg {
+  return {
+    nodeIds: [...survivor.nodeIds, ...absorbed.nodeIds.slice(1)],
+    edgeIds: [...survivor.edgeIds, ...absorbed.edgeIds],
+    metres: Math.round((survivor.metres + absorbed.metres) * 10) / 10,
+    direction: survivor.direction,
+    compass: survivor.compass,
+    landmark: survivor.landmark,
+    // Only the last leg can end at the destination, so the truth about the end moves to the survivor with the
+    // vertices: folding the final stub must not swallow ", your destination".
+    reachesDestination: absorbed.reachesDestination,
+  }
 }
 
 /**

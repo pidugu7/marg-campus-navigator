@@ -19,7 +19,7 @@ owes each test).
 | 8 | Dijkstra | `algorithms/dijkstra.ts` | exact weighted shortest path | **done** (Phase 3, cp1) |
 | 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | **done** (Phase 3, cp2) |
 | 10 | cost profiles | `routing/cost.ts` | fastest / shaded / step-free / quiet | pending (Phase 4) |
-| 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | legs and wording **done** (cp1); the simplification pass is cp3 |
+| 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | **done** (Phase 3, cp1 and cp3) |
 | 12 | geometric measure | `geo/measure.ts` | compass words, turn angles, and the A\* scale | **done** (Phase 3, cp1) |
 
 Every spec is seeded (`src/engine/__tests__/helpers.ts`, mulberry32, no `Math.random` anywhere in
@@ -454,18 +454,20 @@ walked, the step list must replay onto the same vertices, and no vertex may be s
 graphs against `floydWarshall` all-pairs (a matrix algorithm shares no code with either search), and 25
 graphs checked for the symmetry an undirected campus must have.
 
-**Unreachable by construction, so left open on purpose** (both arms, one line each):
+**Unreachable by construction, so left open on purpose** (three arms, one line each; the line numbers are
+today's, and the sentence after them says how to re-derive them):
 `search-common.ts:333` `if (parent === undefined) break` inside the parent walk — `#parent` is written for
 every settled vertex other than the origin, and the walk starts at a settled vertex, so a missing parent
-would mean the run contradicted its own bookkeeping; and `search-common.ts:355` the `?? this.#from` label
+would mean the run contradicted its own bookkeeping; and `search-common.ts:358` the `?? this.#from` label
 fallback in the zero-length case, which `checkEndpoints()` has already proven exists; and
-`search-common.ts:392` the `0` the offer comparator returns for two offers with the same priority *and* the
+`search-common.ts:395` the `0` the offer comparator returns for two offers with the same priority *and* the
 same id, which `offer()` makes impossible (a re-offer must be strictly cheaper to be kept at all). It stays
 because a comparator that never answers `0` is not a total order, and `MinHeap.isHeapOrdered()` audits `<=`. All three are typed that way
 because `GraphIndex.node()` and `Map.get()` answer `undefined` for *any* index, and the alternative was an
 assertion or a cast that says the same thing less honestly. (The three line numbers moved from 316/338/370
-when cp2 gave the shared run a third container; the arms themselves did not change, and `npx vitest run
---coverage src/engine` still reports exactly these and nothing else.)
+when cp2 gave the shared run a third container, and to 333 / 358 / 395 again when cp3 put the fold into
+`found()`; the arms themselves have not changed, and `npx vitest run --coverage src/engine` still reports exactly
+these three and nothing else — re-derive them there rather than trusting this sentence.)
 
 ---
 
@@ -555,7 +557,7 @@ the searches *resembling each other*, which no single algorithm's own file can m
 
 ---
 
-## 11. Turn-by-turn — `algorithms/path-utils.ts` (checkpoint 1 half)
+## 11. Turn-by-turn — `algorithms/path-utils.ts`
 
 **Why it exists.** A path is a list of vertex ids. A walker experiences a list of *corners*. Between those two
 representations sits everything that makes a directions pane worth reading, and it is pure geometry plus a
@@ -568,7 +570,30 @@ step list back into vertex ids; `turnDirectionFor(degrees)` maps a signed angle 
 which is why the union has `steps` at all, and why this half exists before the searches do.
 
 **Invariant.** `stepsReplay(result.steps)` equals `result.nodeIds`, on every pinned fixture and every random
-graph in the sweep. If that ever fails, the directions pane is lying about the route the map is drawing.
+graph in the sweep — and on **all four searches**, which is where cp3's pass could have broken it:
+`search-parity.spec.ts` runs `sweepGraphs(60, 'parity/step-replay')` over every search × every sampled pair and
+checks three things at once: the replay, that one sentence never exceeds one per hop, and that the metres the
+sentences add up to match the route's length within the tenths the legs are rounded to. If that ever fails, the
+directions pane is lying about the route the map is drawing.
+
+**The fold between the halves (`simplifyLegs`, cp3).** `routeLegs` cuts at every corner of 15° or more, which is
+right for geometry and wrong for reading: a 6 m stub between two long stretches buys "Turn right at the cycle
+stand" and then "Turn left at the lamp post", fourteen seconds of walking interrupted by itself. So the cut
+stays where the geometry put it and the *instruction* is folded — a leg under `MIN_INSTRUCTION_METRES` (20 m) is
+absorbed into the leg it was reached through, keeping that survivor's `direction`, `compass` and `landmark`
+untouched. A short **opening** leg has no previous, so it folds forward and the merged step keeps the first
+stretch's heading. `MIN_SEGMENT_METRES` (0.5 m) folds whatever the caller's threshold is, because a half-metre
+leg is two nodes at the same place; `minLegMetres: 0` therefore does not switch the pass off, which is pinned
+rather than left to reading. The joint is counted once, so a folded leg still satisfies `nodes = edges + 1` —
+the shape the replay convention depends on.
+
+**What the fold did to this campus: nothing, and that is the measured claim.** Across all 380 ordered place pairs,
+`routeLegs` produced 1 404 legs and `simplifyLegs` returned the same 1 404, with **0** pairs changed — because the
+shortest walkway in `campus.json` is 80 m, four times the threshold. `src/test/campus-routing.spec.ts` asserts
+exactly that (both the count equality per pair and the 3× floor on the shortest edge), so the pass cannot
+quietly start eating normal routes, and cannot quietly have been needed. The mean route carries **3.69**
+sentences by A* or BFS and **6.91** by depth-first — the long DFS wanderings cost a walker nearly twice as many
+turns to read — with a maximum of 10 on one route (`Research Labs → Hostel Block 2`).
 
 **Found while testing.** The first version named a leg's landmark by the rule "far end, unless this is a
 turning leg that does not reach the destination", which quietly dropped the corner from the *final* turn — the
@@ -590,10 +615,18 @@ replay convention); a 12-unit offset over 30 is 21.8° and cuts while a 4-unit o
 corners in five vertices make four legs, not three; the opening leg is named for its far end and every other
 leg for its corner, and a corner with no label drops the clause instead of printing a vertex id;
 `turnDirectionFor` at each threshold and one hair inside it, mirrored left/right with the U-turn as the one
-bucket that does not mirror; and 120 random graphs where `stepsReplay(stepsFromLegs(routeLegs(...)))` returns
-the path unchanged, with the sum of leg lengths equal to `|path| + |legs| − 1`.
-`dijkstra.spec.ts` asserts the same replay property on routes, not on hand-built vertex lists. 100 %
-statements and branches; the simplification pass that belongs *between* grouping and wording is cp3's.
+bucket that does not mirror; **cp3's sweep of the whole circle** — every quarter-degree from −180 to 180 checked
+against a table written from the exported thresholds rather than from literals, plus eight explicit straddles at
+15/60/135/165 because a sweep whose expectation is derived from the same constants can move with a wrong
+constant, and only the spelled-out boundaries can catch a `>` that should have been a `>=`; and 120 random
+graphs where `stepsReplay(stepsFromLegs(routeLegs(...)))` returns the path unchanged, with the sum of leg lengths
+equal to `|path| + |legs| − 1`. Then 9 tests for `simplifyLegs` — identity when nothing is short, the fold into
+the previous leg with the survivor's record winning outright, the boundary from both sides at 19.9/20,
+the destination clause surviving a folded final stub, the forward fold of a short opener, an all-stub route
+collapsing to one sentence, the 0.5 m floor surviving `minLegMetres: 0`, a configurable threshold, and the
+serpentine that runs through the real `routeLegs` so the composition is tested and not three units agreeing.
+`dijkstra.spec.ts` asserts the same replay property on routes, not on hand-built vertex lists. **27 tests**, and
+`path-utils.ts` is still at 100 % statements and branches with the new pass inside it.
 
 ---
 
@@ -679,13 +712,14 @@ table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **425 tests in 23 files** · build ok |
-| `src/engine` | **249 tests** — structures 77, `algorithms/` 130 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 17), geo 21, `__tests__/` 21 (contract 6, search-parity 15) |
+| `npm run check` | typecheck · lint · **437 tests in 23 files** · build ok |
+| `src/engine` | **260 tests** — structures 77, `algorithms/` 140 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 27), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
 | `src/data` | 86 (`build-graph.spec.ts`) |
 | `src/ui/map` | 64 (view 25, marker-plan 15, tip-content 16, icons 8) |
-| `src/test` | 26 — architecture guard 14, `map:validate` 6, campus routing 4, schema drift 2 |
+| `src/test` | 27 — architecture guard 14, `map:validate` 6, campus routing 5, schema drift 2 |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
 | sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 profiles (metres, unit, jittered, `× 0.2`), zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
+| the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
 | the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
 | `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
 | bundle | `dist/assets/index-*.js` 286.69 kB (gzip 90.32 kB) — unchanged from cp1, because no UI module imports the searches yet; Phase 3 cp4 is where they reach a screen |

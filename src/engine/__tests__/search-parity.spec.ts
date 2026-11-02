@@ -17,6 +17,7 @@
  *   whether a route exists is where they are not.
  */
 import { describe, expect, it } from 'vitest'
+import { stepsReplay } from '../algorithms/path-utils'
 import { aStar } from '../algorithms/a-star'
 import { bfs } from '../algorithms/bfs'
 import { depthFirstRoute, reachableFrom } from '../algorithms/dfs'
@@ -135,6 +136,42 @@ describe('the four searches, on the same broken input', () => {
       if (result.ok) continue
       expect([...result.exploredOrder].sort(), search.name).toEqual(reach)
     }
+  })
+})
+
+describe('the four searches, on the directions list', () => {
+  it('replays the walk it found, on every algorithm, on every pair', () => {
+    // cp3 put `simplifyLegs` between the geometry and the wording, so the property that matters is not "the
+    // sentences are pretty" — it is that a step list, concatenated, is *the same path the search returned*. If
+    // a fold ever dropped a vertex or double-counted a joint, this fails on all four searches at once, which
+    // is the only way to notice it happened to the one you did not think about. `metres` accounting is checked
+    // in the same sweep because a leg that loses a vertex usually loses its length too.
+    sweepGraphs(60, 'parity/step-replay', ({ trial, generated, index, blocked, sources }) => {
+      for (const source of sources) {
+        for (const target of targetsOf(generated)) {
+          const where = `trial ${String(trial)} ${source} to ${target}`
+          for (const search of SEARCHES) {
+            const result = search.run(index, source, target, { cost: LADDER_COST, blockedEdges: blocked })
+            if (!result.ok) continue
+            expect(stepsReplay(result.steps), `${where}: ${search.name} steps replay`).toEqual([...result.nodeIds])
+            expect(result.steps.length, `${where}: ${search.name} one sentence per turn`).toBeLessThanOrEqual(
+              result.hops + 1,
+            )
+            const told = result.steps.reduce((total, step) => total + step.metres, 0)
+            expect(told, `${where}: ${search.name} sentence lengths`).toBeLessThanOrEqual(
+              result.metres + 0.05 * result.steps.length,
+            )
+            expect(told, `${where}: ${search.name} lost a stretch`).toBeGreaterThanOrEqual(
+              result.metres - 0.05 * result.steps.length,
+            )
+            for (const step of result.steps) {
+              expect(step.instruction.length, `${where}: ${search.name} an empty sentence`).toBeGreaterThan(0)
+              expect(step.nodeIds.length, `${where}: ${search.name} a step without vertices`).toBeGreaterThan(0)
+            }
+          }
+        }
+      }
+    })
   })
 })
 

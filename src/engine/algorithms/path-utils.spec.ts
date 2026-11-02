@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_EDGE_ATTRIBUTES } from '../constants'
 import { AdjacencyGraph } from '../structures/graph'
 import { BASE_SEED, createRandom, indexOfGraph, randomGraph } from '../__tests__/helpers'
+import { MIN_INSTRUCTION_METRES, MIN_SEGMENT_METRES } from '../constants'
 import {
   SHARP_WITHIN_DEGREES,
   SLIGHT_WITHIN_DEGREES,
   STRAIGHT_WITHIN_DEGREES,
   routeLegs,
+  simplifyLegs,
   stepsFromLegs,
   stepsReplay,
   turnDirectionFor,
+  type RouteLeg,
 } from './path-utils'
-import type { EdgeAttributes, GraphIndex, RouteStep } from '../types'
+import type { EdgeAttributes, GraphIndex, NodeId, RouteStep, TurnDirection } from '../types'
 
 /**
  * The translation from a path to a directions list. Everything here is geometry and wording, so none of it
@@ -265,5 +268,247 @@ describe('stepsReplay', () => {
       }
       expect(steps.reduce((total, step) => total + step.nodeIds.length, 0)).toBe(path.length + steps.length - 1)
     }
+  })
+})
+
+/* ----------------------------------------------------------------------------------------------------------------
+ * `simplifyLegs` — the pass between the geometry and the words.
+ *
+ * These tests hand the function *legs*, not graphs, because that is its contract: it is a transform on the
+ * record `routeLegs` produces, and it must not need a search to be reasoned about. One test runs the whole
+ * pipeline, so the claim that the three halves compose is also checked rather than assumed.
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+/** A leg with every field the fold might copy filled in, so a wrong copy is visible. */
+function legOf(overrides: Partial<RouteLeg> & { metres: number }): RouteLeg {
+  return {
+    nodeIds: ['p', 'q'],
+    edgeIds: ['pq'],
+    direction: 'left',
+    compass: 'east',
+    landmark: 'Corner',
+    reachesDestination: false,
+    ...overrides,
+  } as RouteLeg
+}
+
+describe('simplifyLegs', () => {
+  it('leaves a list of legs worth reading alone', () => {
+    const legs = [legOf({ metres: 100 }), legOf({ metres: 40 }), legOf({ metres: 60.5 })]
+    expect(simplifyLegs(legs)).toEqual(legs)
+    // One leg is already the shortest possible instruction list: a 4 m leg on its own has nothing to fold into,
+    // and inventing a second leg to fold it against would be the pass making the route worse.
+    const alone = legOf({ metres: 4 })
+    expect(simplifyLegs([alone])).toEqual([alone])
+    expect(simplifyLegs([])).toEqual([])
+  })
+
+  it('folds a short middle leg into the one it was reached through', () => {
+    const legs = [
+      legOf({ metres: 100, nodeIds: ['a', 'b'], edgeIds: ['ab'], landmark: 'Gate' }),
+      legOf({ metres: 6, nodeIds: ['b', 'c'], edgeIds: ['bc'], direction: 'right', landmark: 'Cycle stand' }),
+      legOf({
+        metres: 100,
+        nodeIds: ['c', 'd'],
+        edgeIds: ['cd'],
+        direction: 'left',
+        landmark: 'Library',
+        reachesDestination: true,
+      }),
+    ]
+    const folded = simplifyLegs(legs)
+    expect(folded).toHaveLength(2)
+    const merged = folded[0] as RouteLeg
+    // The joint is counted once, so the leg keeps `nodes = edges + 1` — the shape `routeLegs` produces and
+    // `stepsReplay` depends on.
+    expect(merged.nodeIds).toEqual(['a', 'b', 'c'])
+    expect(merged.edgeIds).toEqual(['ab', 'bc'])
+    expect(merged.metres).toBe(106)
+    // The survivor's record wins outright: the turn the walker was told about, its heading, its corner.
+    expect(merged.direction).toBe('left')
+    expect(merged.compass).toBe('east')
+    expect(merged.landmark).toBe('Gate')
+    expect(merged.reachesDestination).toBe(false)
+    // And the turn *out* of the stub is still told, because the third leg was never touched.
+    expect(folded[1]?.direction).toBe('left')
+    expect(folded[1]?.landmark).toBe('Library')
+    expect(folded[1]?.reachesDestination).toBe(true)
+  })
+
+  it('folds below the threshold and not at it, on both sides', () => {
+    const shortLeg = legOf({ metres: MIN_INSTRUCTION_METRES - 0.1, nodeIds: ['a', 'b'], edgeIds: ['ab'] })
+    const exactLeg = legOf({ metres: MIN_INSTRUCTION_METRES, nodeIds: ['b', 'c'], edgeIds: ['bc'] })
+    const longLeg = legOf({ metres: MIN_INSTRUCTION_METRES + 0.1, nodeIds: ['c', 'd'], edgeIds: ['cd'] })
+    expect(simplifyLegs([longLeg, shortLeg, exactLeg])).toHaveLength(2)
+    expect(simplifyLegs([longLeg, exactLeg, longLeg, shortLeg])).toHaveLength(3)
+    // The threshold is `>=`, so exactly 20 m is a leg worth a sentence. 19.9 is fourteen seconds of walking
+    // less than that, and it is noise: the boundary is where the decision lives, so it is pinned on both sides
+    // rather than quoted.
+    expect(MIN_INSTRUCTION_METRES).toBe(20)
+  })
+
+  it('keeps the ", your destination" clause when the last leg is the short one', () => {
+    const legs = [
+      legOf({ metres: 200, nodeIds: ['a', 'b'], edgeIds: ['ab'] }),
+      legOf({ metres: 8, nodeIds: ['b', 'c'], edgeIds: ['bc'], reachesDestination: true }),
+    ]
+    const folded = simplifyLegs(legs)
+    expect(folded).toHaveLength(1)
+    expect(folded[0]?.reachesDestination).toBe(true)
+    expect(stepsFromLegs(folded)[0]?.instruction).toContain('your destination')
+  })
+
+  it('folds a short opening leg forward, keeping the first heading', () => {
+    const legs = [
+      legOf({ metres: 5, nodeIds: ['a', 'b'], edgeIds: ['ab'], direction: 'straight', compass: 'north-east', landmark: 'Archive' }),
+      legOf({ metres: 120, nodeIds: ['b', 'c'], edgeIds: ['bc'], direction: 'right', compass: 'south', landmark: 'Lamp' }),
+    ]
+    const folded = simplifyLegs(legs)
+    expect(folded).toHaveLength(1)
+    const only = folded[0] as RouteLeg
+    expect(only.nodeIds).toEqual(['a', 'b', 'c'])
+    expect(only.metres).toBe(125)
+    // An opening leg is the only one whose direction is `'straight'`, and the compass is the walker's first
+    // heading: both belong to the sentence "Head north-east to the Archive", which stays true even though the
+    // walk bends 5 m in. The *second* leg's wording would have been "Turn right at the Lamp" — for 5 m of
+    // walking, which is why the fold keeps the opening record instead.
+    expect(only.direction).toBe('straight')
+    expect(only.compass).toBe('north-east')
+    expect(only.landmark).toBe('Archive')
+    expect(stepsFromLegs(folded)[0]?.instruction).toBe('Head north-east to Archive')
+  })
+
+  it('collapses a route made entirely of stubs into one instruction', () => {
+    const legs = [1, 2, 3, 4, 5].map((i) =>
+      legOf({
+        metres: 4,
+        nodeIds: [`n${String(i - 1)}`, `n${String(i)}`],
+        edgeIds: [`e${String(i)}`],
+        reachesDestination: i === 5,
+      }),
+    )
+    const folded = simplifyLegs(legs)
+    expect(folded).toHaveLength(1)
+    expect(folded[0]?.nodeIds).toEqual(['n0', 'n1', 'n2', 'n3', 'n4', 'n5'])
+    expect(folded[0]?.metres).toBe(20)
+    expect(folded[0]?.reachesDestination).toBe(true)
+    expect(folded[0]?.direction).toBe('left')
+  })
+
+  it('never lets the threshold fall below the point where two nodes are the same place', () => {
+    // A caller asking for no threshold at all still gets `MIN_SEGMENT_METRES`'s fold, because a leg of half a
+    // metre is arithmetic noise and not a corner. This is the whole reason the floor is `Math.max`: without it
+    // a zero threshold would be a way to turn the pass off, and the pass exists to be off-nothing.
+    const stubs = [
+      legOf({ metres: 100, nodeIds: ['a', 'b'], edgeIds: ['ab'] }),
+      legOf({ metres: 0.4, nodeIds: ['b', 'c'], edgeIds: ['bc'] }),
+      legOf({ metres: 0.6, nodeIds: ['c', 'd'], edgeIds: ['cd'] }),
+      legOf({ metres: 0.4, nodeIds: ['d', 'e'], edgeIds: ['de'] }),
+    ]
+    // `0.4` folds into the 100 m leg, `0.6` survives the floor and `0.4` folds into it: two sentences, and the
+    // 0.6 one is the only turn a walker could physically tell apart from standing still.
+    expect(simplifyLegs(stubs, { minLegMetres: 0 })).toHaveLength(2)
+    expect(simplifyLegs(stubs, { minLegMetres: 0 })[1]?.metres).toBe(1.0)
+    expect(MIN_SEGMENT_METRES).toBe(0.5)
+    // A threshold above 0.6 leaves nothing standing but the first sentence.
+    expect(simplifyLegs(stubs, { minLegMetres: 10 })).toHaveLength(1)
+  })
+
+  it('takes a configurable threshold, because a plaza and a campus are not the same noise floor', () => {
+    const legs = [
+      legOf({ metres: 60, nodeIds: ['a', 'b'], edgeIds: ['ab'] }),
+      legOf({ metres: 40, nodeIds: ['b', 'c'], edgeIds: ['bc'] }),
+    ]
+    expect(simplifyLegs(legs, { minLegMetres: 30 })).toHaveLength(2)
+    expect(simplifyLegs(legs, { minLegMetres: 50 })).toHaveLength(1)
+    expect(simplifyLegs(legs, { minLegMetres: 40 }).length).toBe(2)
+  })
+
+  it('does not change the walk, on a serpentine with eight corners', () => {
+    // Built through the real `routeLegs`, so the composition is what is tested and not three units agreeing.
+    const builder = new AdjacencyGraph()
+    const ids: NodeId[] = []
+    const edgeIds: string[] = []
+    const walk = 40
+    for (let i = 0; i <= 8; i++) {
+      const id = `s${String(i)}`
+      builder.addNode({ id, x: i * walk, y: i % 2 === 1 ? 12 : 0, label: `S${String(i)}`, kind: 'junction' })
+      ids.push(id)
+      if (i > 0) {
+        const edgeId = `s${String(i - 1)}-${id}`
+        builder.addEdge({ id: edgeId, from: `s${String(i - 1)}`, to: id, metres: walk, attributes })
+        edgeIds.push(edgeId)
+      }
+    }
+    const index = builder.seal()
+    const legs = routeLegs(index, ids, edgeIds)
+    // Every 40 m stretch between two 34° kinks is over the threshold, so on this map the pass is a no-op —
+    // which is the most important thing it can do: a simplifier that fires on a normal route is eating turns.
+    const kept = simplifyLegs(legs)
+    expect(kept).toEqual(legs)
+    // Now make every second stretch a stub, and the replay still has to be the same walk.
+    const stubBuilder = new AdjacencyGraph()
+    const stubIds: NodeId[] = []
+    const stubEdges: string[] = []
+    for (let i = 0; i <= 8; i++) {
+      const id = `t${String(i)}`
+      stubBuilder.addNode({ id, x: i * walk, y: i % 2 === 1 ? 12 : 0, label: `T${String(i)}`, kind: 'junction' })
+      stubIds.push(id)
+      if (i > 0) {
+        const edgeId = `t${String(i - 1)}-${id}`
+        stubBuilder.addEdge({
+          id: edgeId,
+          from: `t${String(i - 1)}`,
+          to: id,
+          metres: i % 2 === 1 ? 4 : walk,
+          attributes,
+        })
+        stubEdges.push(edgeId)
+      }
+    }
+    const stubIndex = stubBuilder.seal()
+    const rawLegs = routeLegs(stubIndex, stubIds, stubEdges)
+    const folded = simplifyLegs(rawLegs)
+    expect(folded.length).toBeLessThan(rawLegs.length)
+    expect(stepsReplay(stepsFromLegs(folded))).toEqual(stubIds)
+    expect(stepsReplay(stepsFromLegs(rawLegs))).toEqual(stubIds)
+    // Length is conserved across the fold, to the tenth-of-a-metre rounding the legs already carry.
+    const total = folded.reduce((sum, l) => sum + l.metres, 0)
+    expect(Math.abs(total - rawLegs.reduce((sum, l) => sum + l.metres, 0))).toBeLessThanOrEqual(0.05 * folded.length)
+  })
+})
+
+describe('the turn buckets, at their boundaries', () => {
+  it('changes word exactly where the constant says, from -180 to 180', () => {
+    // The sweep is written against the exported thresholds rather than against the literals, so moving
+    // `SLIGHT_WITHIN_DEGREES` moves the expectation with it and a drift between the table and the code is
+    // impossible. A quarter-degree step lands on both sides of all four boundaries (15, 60, 135, 165)
+    // because they are whole degrees, which is the point: a boundary you cannot straddle is a boundary you
+    // cannot test.
+    const expected = (degrees: number): TurnDirection => {
+      const magnitude = Math.abs(degrees)
+      if (magnitude > 180 - STRAIGHT_WITHIN_DEGREES) return 'uturn'
+      if (magnitude < STRAIGHT_WITHIN_DEGREES) return 'straight'
+      const side = degrees > 0 ? 'right' : 'left'
+      const qualifier =
+        magnitude >= SHARP_WITHIN_DEGREES ? 'sharp-' : magnitude >= SLIGHT_WITHIN_DEGREES ? '' : 'slight-'
+      return `${qualifier}${side}` as TurnDirection
+    }
+    for (let degrees = -180; degrees <= 180; degrees += 0.25) {
+      const angle = Math.round(degrees * 100) / 100
+      expect(turnDirectionFor(angle), `${String(angle)}°`).toBe(expected(angle))
+    }
+    // And the straddle itself, spelled out, because a loop over both sides of a boundary proves the table and
+    // these four lines prove which side is which.
+    expect(turnDirectionFor(STRAIGHT_WITHIN_DEGREES - 0.25)).toBe('straight')
+    expect(turnDirectionFor(STRAIGHT_WITHIN_DEGREES)).toBe('slight-right')
+    expect(turnDirectionFor(SLIGHT_WITHIN_DEGREES - 0.25)).toBe('slight-right')
+    expect(turnDirectionFor(SLIGHT_WITHIN_DEGREES)).toBe('right')
+    expect(turnDirectionFor(SHARP_WITHIN_DEGREES - 0.25)).toBe('right')
+    expect(turnDirectionFor(SHARP_WITHIN_DEGREES)).toBe('sharp-right')
+    expect(turnDirectionFor(180 - STRAIGHT_WITHIN_DEGREES)).toBe('sharp-right')
+    expect(turnDirectionFor(180 - STRAIGHT_WITHIN_DEGREES + 0.25)).toBe('uturn')
+    expect(turnDirectionFor(180)).toBe('uturn')
+    expect(turnDirectionFor(-180)).toBe('uturn')
   })
 })

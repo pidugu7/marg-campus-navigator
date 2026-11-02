@@ -15,6 +15,14 @@ export const ENGINE_VERSION = '0.3.0-phase3.algorithms' as const
 /** Below this, two waypoints are the same place for path-simplification purposes. */
 export const MIN_SEGMENT_METRES = 0.5
 
+/**
+ * Below this, a leg is not worth a sentence of its own — see `simplifyLegs`. 20 m is fourteen seconds at the
+ * `fastest` pace: short enough that reading a turn instruction for it costs more attention than making the
+ * turn costs feet. Pinned from both sides of the boundary in `path-utils.spec.ts`, because a threshold that
+ * nobody can measure the edge of is a preference dressed as a constant.
+ */
+export const MIN_INSTRUCTION_METRES = 20
+
 /** Tolerance for comparing path costs from two different algorithms. */
 export const COST_EPSILON = 1e-6
 
