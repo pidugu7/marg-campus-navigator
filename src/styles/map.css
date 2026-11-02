@@ -1,0 +1,601 @@
+/* The map plate: a fixed-aspect frame, an SVG that owns every gesture, and overlays that live outside the
+   SVG so they stay the same size while the camera moves. */
+
+.map-frame {
+  position: relative;
+  border-radius: var(--radius-l);
+  background: var(--map-bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--map-bg);
+  touch-action: none; /* the browser must not pan or pinch-zoom the page under a finger */
+  cursor: grab;
+}
+
+.map--dragging {
+  cursor: grabbing;
+}
+
+.map:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* --- layers --------------------------------------------------------------- */
+
+.map-paper {
+  fill: var(--map-bg);
+}
+
+.surface {
+  stroke: none;
+  opacity: 0.75;
+}
+
+.surface--lawn {
+  fill: #dfeecd;
+}
+.surface--water {
+  fill: #cfe3f2;
+}
+.surface--plaza {
+  fill: #e9e5f5;
+}
+.surface--parking {
+  fill: #e2e6ee;
+}
+.surface--construction {
+  fill: #f2e2cf;
+}
+
+@media (prefers-color-scheme: dark) {
+  .surface--lawn {
+    fill: #1c2a20;
+  }
+  .surface--water {
+    fill: #16283a;
+  }
+  .surface--plaza {
+    fill: #262238;
+  }
+  .surface--parking {
+    fill: #222632;
+  }
+  .surface--construction {
+    fill: #30261c;
+  }
+}
+
+.layer-walkways line {
+  stroke-linecap: round;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.walk-case {
+  stroke: var(--walk-case);
+  stroke-width: 6;
+}
+
+.walk-fill {
+  stroke: var(--walk-fill);
+  stroke-width: 3.4;
+}
+
+.walk--grass.walk-fill {
+  stroke: #a8c98f;
+}
+.walk--gravel.walk-fill {
+  stroke: #cfc6b4;
+}
+.walk--stairs.walk-fill {
+  stroke-dasharray: 2 4;
+  stroke-width: 3.4;
+}
+.walk--oneway.walk-fill {
+  stroke-dasharray: 6 2;
+}
+.walk--shaded.walk-case {
+  stroke: var(--walk-case-dark);
+}
+
+.building {
+  fill-opacity: var(--building-fill-opacity);
+  stroke-opacity: var(--building-stroke-opacity);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.node {
+  stroke: var(--map-halo);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.node--junction {
+  fill: var(--ink-faint);
+  opacity: 0.55;
+}
+
+.node--entrance {
+  fill: var(--map-halo);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* A place's dot is filled with its zone colour from the data file, so only the outline is styled here. */
+.node--place,
+.node--gate {
+  stroke: var(--map-halo);
+  stroke-width: 2;
+}
+
+/* --- overlays ------------------------------------------------------------- */
+
+.map-controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.map-btn {
+  display: grid;
+  place-items: center;
+  width: 32px; /* 8 × 4px: the control is a 4px-grid multiple in both axes */
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  box-shadow: var(--shadow-raised);
+}
+
+.map-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.map-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.map-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* --- markers: badges, labels, hit areas ---------------------------------- */
+
+.marker {
+  cursor: pointer;
+  outline: none;
+}
+
+/* Invisible, and deliberately bigger than the picture: 32 px of finger room around a 26 px badge.
+   `pointer-events: all` because a transparent fill is otherwise not a hit target. */
+.marker-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.badge-plate {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.badge {
+  color: var(--ink-soft); /* Lucide strokes with `currentColor` */
+}
+
+.marker-label {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  fill: var(--map-ink);
+  /* The halo is what lets text sit on top of a building without a plate behind it: paint the stroke under
+     the fill, keep it a constant 3 px whatever the zoom. */
+  paint-order: stroke;
+  stroke: var(--map-halo);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.marker--active .badge-plate,
+.marker:focus-visible .badge-plate {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.marker--active .marker-label,
+.marker:focus-visible .marker-label {
+  fill: var(--accent);
+}
+
+/* --- walkways and buildings: described, not navigated -------------------- */
+
+.walk {
+  cursor: pointer;
+}
+
+/* A wider transparent stroke, because a 3.4 px path is not a hover target. `stroke` (not `all`) keeps the
+   empty middle of the plate from stealing drags that start between two paths. */
+.walk-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+.walk--active .walk-fill,
+.walk.marker--active .walk-fill {
+  stroke: var(--accent);
+}
+
+.building {
+  cursor: default;
+  transition: fill-opacity 120ms ease;
+}
+
+.building--active {
+  fill-opacity: calc(var(--building-fill-opacity) * 2);
+}
+
+/* --- overlays: tooltip and legend ----------------------------------------- */
+
+.map-tip {
+  position: absolute;
+  z-index: 2;
+  max-width: 224px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  color: var(--ink);
+  font: 400 11px/1.45 var(--font-ui);
+  pointer-events: none;
+  /* Anchored by projection, then pulled up by its own height plus a gap. The tip is never a drop target,
+     so it cannot steal a drag that started on the marker it describes. */
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.map-tip--below {
+  transform: translate(-50%, 10px);
+}
+
+.map-tip strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.map-tip span {
+  display: block;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
+  max-width: min(340px, 62%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow-raised);
+  color: var(--ink-soft);
+}
+
+.map-legend-toggle {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  min-height: 32px; /* the 4 px grid again, and the same floor the markers obey */
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 650 11px/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.map-legend-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--radius-m);
+}
+
+.map-legend-zoom {
+  margin-left: auto;
+  font: 500 10px/1 var(--font-mono);
+  color: var(--ink-soft);
+}
+
+.map-legend-caret {
+  transition: transform 120ms ease;
+}
+
+.map-legend-caret--stowed {
+  transform: rotate(-90deg);
+}
+
+.map-legend-body {
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.map-legend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 2px var(--space-2);
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.map-legend-list li {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  font: 500 10px/1.5 var(--font-ui);
+}
+
+.swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.legend-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.legend-line {
+  flex: none;
+  width: 24px;
+  height: 8px;
+}
+
+.legend-line line {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.legend-line .walk-case {
+  stroke-width: 3.6;
+}
+
+.legend-line .walk-fill {
+  stroke-width: 1.8;
+}
+
+.legend-line .walk--stairs {
+  stroke-dasharray: 1.4 2.2;
+  stroke-width: 1.8;
+}
+
+/* `--ink-faint` measured 3.3:1 on the light plate and 4.1:1 on the dark one — under AA for 10 px text.
+   Secondary *is* secondary, but it still has to be readable, so the notes sit on `--ink-soft` (7.9:1). */
+.map-legend-note {
+  margin: 0 0 2px;
+  color: var(--ink-soft);
+  font: 400 10px/1.45 var(--font-mono);
+}
+
+@media (max-width: 640px) {
+  .map-legend-hint {
+    display: none; /* on a phone the hint is what the fingers are for */
+  }
+
+  .map-legend {
+    max-width: calc(100% - var(--space-4));
+  }
+
+  /* The plate follows the campus's shape. A tall phone plate cannot show *more* campus — the camera is
+     clamped to the canvas, so the extra height would only be empty margin above and below a shrunken map.
+     5/4 is the closest practical ratio to the data's 1600 × 1000, which is how the whole campus stays
+     readable at 360 px wide without anyone having to know that dragging exists. */
+  .map {
+    aspect-ratio: 5 / 4;
+  }
+
+  .walk-case {
+    stroke-width: 5;
+  }
+  .node--junction {
+    /* Junction dots at their desktop size read as dust on a 360 px plate, and dust invites a mis-tap. */
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-btn,
+  .building,
+  .map-legend-caret {
+    transition: none;
+  }
+}
+
+/* ── the route ─────────────────────────────────────────────────────────────
+   Drawn over the walkways it follows and under the dots it connects, in the same two passes the walkway
+   layer uses: a wide halo in the plate's own colour, then the line. Without the halo the route disappears
+   into a walkway it runs alongside for 40 m, which is the most common way a drawn route becomes unreadable. */
+
+.layer-route {
+  pointer-events: none; /* the route is an answer, not a control: clicks belong to the map camera */
+}
+
+.route-halo,
+.route-line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.route-halo {
+  stroke: var(--map-bg);
+  stroke-width: 8px;
+}
+
+.route-line {
+  stroke: var(--route);
+  stroke-width: 4px;
+}
+
+/* Sizes inside a pin are CSS pixels: the group is `scale(unitsPerPx)`'d, so the r values in the layer are
+   already in the same space as a badge's. */
+.route-pin {
+  /* The ring's outline is drawn under its fill, so the map-bg hairline sits outside the colour and the pin keeps
+     its diameter where it crosses the route line instead of eating 1.4 px of it. */
+  paint-order: stroke fill;
+}
+
+.route-pin-shape {
+  stroke-width: 1.4px;
+}
+
+.route-pin--start .route-pin-shape {
+  fill: var(--route-start);
+  stroke: var(--map-bg);
+}
+
+.route-pin--start .route-pin-eye {
+  fill: var(--map-bg);
+}
+
+.route-pin--end .route-pin-shape {
+  fill: var(--map-bg);
+  stroke: var(--route-end);
+  stroke-width: 3px;
+}
+
+.route-pin--end .route-pin-eye {
+  fill: var(--route-end);
+}
+
+/* --- the replay overlay (Phase 4) -------------------------------------------------------------------
+   The explored region is drawn under the route line and above the walkways, in screen units like the pins: a
+   settled vertex is a dot a reader counts, not a disc that grows when they zoom in. */
+.layer-replay {
+  pointer-events: none;
+}
+
+.replay-node circle {
+  fill-opacity: 0.85;
+  stroke: var(--map-bg);
+  stroke-width: 0.6;
+}
+
+/* The frontier pulses because it is *about to* stop mattering. `transform-box` is what makes the scale spin a
+   circle about its own centre rather than about the SVG's origin. */
+.replay-frontier circle {
+  fill: none;
+  stroke: var(--route);
+  stroke-width: 1.4;
+  opacity: 0.9;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: replay-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes replay-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+
+  50% {
+    transform: scale(1.35);
+    opacity: 0.35;
+  }
+}
+
+.replay-node--current circle {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+}
+
+/* Bolder than the answer's own line on purpose: on the last frame the replay is showing what the search *won*. */
+.replay-path {
+  fill: none;
+  stroke: var(--route);
+  stroke-width: 6.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The reader asked for less motion, so the frontier holds still and simply goes dim. The keyframe stays defined —
+   this rule removes the only element that used it. */
+@media (prefers-reduced-motion: reduce) {
+  .replay-frontier circle {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
+/* --- the compare overlay (Phase 4) -------------------------------------------------------------------
+   Three searches, three lanes. The hue is decoration here: which line is which is carried by the dash pattern
+   and by the lane the legend names, both of which survive greyscale. */
+.layer-compare {
+  pointer-events: none;
+}
+
+.compare-line line {
+  fill: none;
+  /* 3 px, and `LANE_OFFSET_PX` in `compare-plan.ts` is 4: the lanes have to be further apart than they are
+     wide, and the stylesheet guard asserts exactly that inequality. */
+  stroke-width: 3;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.92;
+}
+
+.compare-line--dijkstra line {
+  stroke: var(--route);
+  stroke-width: 3.6;
+}
+
+.compare-line--a-star line {
+  stroke: var(--route-end);
+}
+
+.compare-line--bfs line {
+  stroke: var(--warn-line);
+  opacity: 0.85;
+}

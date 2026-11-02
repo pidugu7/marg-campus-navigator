@@ -118,21 +118,6 @@ body {
   }
 }
 
-.map {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 10;
-  background: var(--map-bg);
-  border-radius: var(--radius-l);
-  border: 1px solid var(--line);
-}
-
-.map-note {
-  fill: var(--map-ink);
-  font-family: var(--font-ui);
-}
-
 .side {
   display: grid;
   gap: var(--gap);
@@ -210,4 +195,731 @@ body {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── route form ─────────────────────────────────────────────
+   A select is a select: 32px tall like the map's own buttons, on the same 4px grid, and never wider than the
+   column it is in. The picker row is a 2-column grid with the swap button in the middle so the two fields line
+   up whether they sit side by side (1440) or stacked (360), and the arrow rotates a quarter turn when it moves
+   — a horizontal arrow between two stacked fields would point at nothing. */
+
+.route-form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.route-pickers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-1);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.field-caption {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.picker {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.picker:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.picker:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.picker option:disabled {
+  color: var(--ink-faint);
+}
+
+.route-swap {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.route-swap:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.route-swap:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.route-swap:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.route-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 900px) {
+  /* Stacked: From, To, then the swap — and the arrow turns to say "down", which is what it now does. */
+  .route-pickers {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .route-swap svg {
+    transform: rotate(90deg);
+  }
+}
+
+/* ── the result card ────────────────────────────────────────
+   A number, a pair of place names, the cost of finding them, then the turns. The arrow is the only colour
+   decision in the card, and it encodes which *side*: `--accent` for left, `--route-alt` for right — the two
+   tokens the map already uses for the route and its alternative, so a card above a map and the map itself
+   agree about what "left" looks like. Straight and stay get no colour at all, because a heading is not a turn. */
+
+.route-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.route-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.route-pair-start,
+.route-pair-end {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-pair-arrow {
+  color: var(--ink-faint);
+}
+
+.route-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.route-figure-sep {
+  color: var(--ink-faint);
+}
+
+.route-pace {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+.route-status {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+/* The preference line: which trade produced these numbers, and what it cost. Same size as the status sentence
+   it sits above, deliberately — this is a footnote about the answer, not a second headline. */
+.route-profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.route-profile-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-delta {
+  /* Tabular figures, so the Δ of two searches lines up when the card repaints on every keystroke of a picker. */
+  font-variant-numeric: tabular-nums;
+}
+
+.route-metrics {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+}
+
+.route-metric {
+  display: contents;
+}
+
+.route-metrics dt {
+  color: var(--ink-faint);
+}
+
+.route-metrics dd {
+  margin: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.route-steps {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: route-step;
+  /* A long route is a scrollable list, not an infinite card: at 360 the map and this pane share one column, and
+     a 10-step route that pushes the legend off the screen is worse than one you scroll. */
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.route-step {
+  /* Four columns, one row: number, arrow, sentence, distance. `display: contents` on the row's own children is
+     not needed because none of them wrap a container — each of the four is a direct grid item, so the columns
+     above are exactly the four things a reader's eye lands on, in the order the walk happens. */
+  display: grid;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  counter-increment: route-step;
+  background: var(--surface-2);
+}
+
+.route-step::before {
+  content: counter(route-step);
+  grid-column: 1;
+  grid-row: 1;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.route-step-arrow {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+
+.route-step--left .route-step-arrow,
+.route-step--slight-left .route-step-arrow,
+.route-step--sharp-left .route-step-arrow {
+  color: var(--accent);
+}
+
+.route-step--straight .route-step-arrow,
+.route-step--stay .route-step-arrow {
+  /* Written out so the absence of colour is a decision: a turn that has no side still has a row, and `stay` in
+     particular means there is nothing to point at. */
+  color: var(--ink-faint);
+}
+
+.route-step--right .route-step-arrow,
+.route-step--slight-right .route-step-arrow,
+.route-step--sharp-right .route-step-arrow,
+.route-step--uturn .route-step-arrow {
+  color: var(--route-alt);
+}
+
+.route-step-text {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.route-step-metres {
+  grid-column: 4;
+  grid-row: 1;
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+/* Two lines per row under 380 px: an instruction and its distance, rather than an instruction wrapped to four
+   lines next to a number nobody reads. The arrow and the step count keep their places. */
+@media (max-width: 380px) {
+  .route-step {
+    grid-template-columns: 16px 18px minmax(0, 1fr);
+  }
+
+  .route-step-text,
+  .route-step-metres {
+    grid-column: 3;
+    justify-self: start;
+  }
+
+  .route-step-metres {
+    grid-row: 2;
+  }
+}
+
+.route-state {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.route-state svg {
+  justify-self: start;
+  color: var(--ink-faint);
+}
+
+.route-state--idle {
+  /* Styled rather than left to the base rule: an empty pane with no edge of its own reads as a card that failed
+     to paint, and this is the state a reader sees first. */
+  border-left: 3px solid var(--line);
+}
+
+.route-state--missing {
+  background: var(--warn-bg);
+  border-left: 3px solid var(--warn-line);
+  color: var(--warn-ink);
+}
+
+.route-state--missing svg {
+  color: var(--warn-line);
+}
+
+.route-headline {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.route-state--missing .route-headline {
+  color: var(--warn-ink);
+}
+
+.route-detail,
+.route-looked {
+  margin: 0;
+}
+
+.route-looked {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+/* --- the replay panel (Phase 4) ---------------------------------------------------------------------
+   The panel is a card's worth of controls, so it borrows the card's border and radius rather than inventing a
+   third surface. No background of its own: the side column already has one, and a second fill on top of it is
+   how a panel starts looking like a dialog nobody asked for. */
+.replay-panel {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* The panel is focusable because ← and → are its controls, and a focus ring is the price of that. */
+.replay-panel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.replay-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.replay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Greyed rather than missing: a step back from the first frame is not a thing, and saying so before the press
+   is the same rule the swap button follows. */
+.replay-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.replay-button--play {
+  border-color: var(--route);
+  color: var(--route);
+}
+
+.replay-scrub {
+  flex: 1 1 6rem;
+  min-width: 5rem;
+  accent-color: var(--route);
+}
+
+.replay-speed-label {
+  font-size: 0.66rem;
+  color: var(--ink-soft);
+}
+
+.replay-speed {
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+}
+
+.replay-caption {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-hint {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 380px) {
+  /* Touch targets first, and by a number rather than by feel: 32×32 CSS px is comfortably over the 24×24 floor
+     in WCAG 2.5.8, the five of them still fit one row at 360 px with the slider wrapped below, and the caption
+     is the part a reader can afford to lose a pixel of. On a pointer the base 26 px stays, because a row that
+     grows on a desktop is a row that pushes the map down for no reason. */
+  .replay-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .replay-caption {
+    font-size: 0.66rem;
+  }
+}
+
+/* --- compare mode (Phase 4) -------------------------------------------------------------------------
+   A table of five numbers by three rows, a legend that can be read without colour, and a sentence under both.
+   The scroll wrapper is what lets 360 px have all five columns without shrinking any of them into unreadable
+   type: the table keeps its real `<table>` semantics and the region takes the arrow keys. */
+.compare-body {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.compare-body:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-caption {
+  padding: 0 0 0.4rem;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  text-align: left;
+  caption-side: top;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 0.3rem 0.45rem;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.compare-table thead th {
+  border-bottom-color: var(--ink-faint);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.compare-table th[scope='row'] {
+  text-align: left;
+  font-weight: 600;
+}
+
+.compare-rowhead {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.compare-table abbr {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+.compare-flag {
+  margin-left: 0.25rem;
+  padding: 0 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.6rem;
+  color: var(--ink-faint);
+}
+
+/* The best value in a column. Bold plus a tint, so the mark survives a greyscale print of the page; and a tie
+   paints on every row that tied, because one arrow between two equal numbers would be a claim about
+   tie-breaking the data does not make. */
+.compare-cell {
+  white-space: nowrap;
+}
+
+.compare-cell--best {
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+
+.compare-insight {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.compare-figure {
+  margin: 0;
+}
+
+/* The legend: swatch, name, and the words that describe both the pattern and the lane. Meaning never travels
+   through colour alone, so the list works with the hues removed. */
+.compare-legend {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.55rem;
+}
+
+.compare-legend-title {
+  margin: 0;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.compare-legend-list {
+  display: grid;
+  gap: 0.22rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compare-legend-item {
+  display: grid;
+  grid-template-columns: 30px auto;
+  gap: 0.1rem 0.4rem;
+  align-items: center;
+  font-size: 0.7rem;
+}
+
+.compare-legend-name {
+  font-weight: 600;
+}
+
+.compare-legend-lane {
+  grid-column: 2;
+  font-size: 0.66rem;
+  color: var(--ink-soft);
+}
+
+.compare-legend-note {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+.compare-swatch {
+  display: block;
+  overflow: visible;
+}
+
+.compare-swatch-line {
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.compare-toggle-box {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+/* Screen-reader text: the cell says "best of the searches that found a route" out loud, and nobody has to see
+   it. The clip pattern rather than `display: none`, which would hide it from the thing it is for. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 380px) {
+  /* The five columns stay five columns at 360 px — the horizontal scroll is the honest answer, and shrinking
+     the type below this is how a data table becomes decoration. */
+  .compare-table {
+    font-size: 0.68rem;
+  }
+
+  .compare-table th,
+  .compare-table td {
+    padding: 0.25rem 0.35rem;
+  }
+
+  .compare-caption {
+    font-size: 0.64rem;
+  }
+}
+
+/* cp5: the cache's own two lines under the metrics. Deliberately quiet — provenance is a footnote to the answer,
+   not a fourth metric, and a badge that shouted would train a reader to look at it instead of at the route. */
+.cache-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.6875rem;
+}
+
+.cache-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.0625rem 0.375rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Two tones, and the same two words in the text: a reader who cannot see the difference is told the difference. */
+.cache-badge[data-tone="hit"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.cache-badge[data-tone="fresh"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cache-clear {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.6875rem;
+  /* 32px is the floor the replay's controls already hold themselves to under a narrow column; a text button
+     with a smaller box is a button that is pressed by accident. */
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+}
+
+.cache-clear:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.cache-clear:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

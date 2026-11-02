@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join, posix, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
@@ -7,6 +7,7 @@ import {
   ENGINE_BANNED_IMPORT_PREFIXES,
   ENGINE_CONSUMERS_ALLOWED,
   ENGINE_TESTED_DIRS,
+  PUBLIC_BARRELS,
   NETWORK_APIS,
   PLATFORM_GLOBALS_IN_ENGINE,
   RUNTIME_DEP_ALLOW_PATTERNS,
@@ -31,7 +32,9 @@ interface SourceFile {
   /** POSIX-style path relative to the repo root, e.g. `src/engine/index.ts`. */
   rel: string
   raw: string
-  /** Comments and string literals removed, so scans hit code and not prose. */
+  /** Comments removed, string literals kept — the text specifiers are read from. */
+  prose: string
+  /** Comments and string literals removed, so identifier scans hit code and not prose. */
   code: string
   isTest: boolean
 }
@@ -44,20 +47,39 @@ const walk = (dir: string, exts: readonly string[]): string[] => {
   return found.filter((name) => exts.some((ext) => name.endsWith(ext))).map((name) => join(dir, name))
 }
 
-const stripNoise = (text: string): string =>
+const stripComments = (text: string): string =>
   text
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1 ')
+
+/** Comments *and* string literals removed: identifier scans must not see prose or literals. */
+const stripNoise = (text: string): string =>
+  stripComments(text)
     .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``')
     .replace(/'(?:\\[\s\S]|[^'\\\n])*'/g, "''")
     .replace(/"(?:\\[\s\S]|[^"\\\n])*"/g, '""')
 
+/**
+ * Which modules a file references, read from `prose` (comments gone, string literals kept).
+ *
+ * Three rounds of false alarms shaped this. A doc comment saying `indistinguishable from
+ * "not added yet"` matched a bare `from "…"` scan, then a template literal in a test message did,
+ * then a union-find header line wrapping across `"no route exists" from "no route was found"`.
+ * Each one cost the same thing: the moment a guard cries wolf, the next engineer adds an
+ * exception instead of fixing a bug. So every pattern is anchored to the start of an
+ * `import`/`export` *statement*, and `[^'"]*?` forbids crossing a quote before `from` — a string
+ * literal can no longer look like a specifier, while a multi-line `import type { … } from '…'`
+ * still matches.
+ *
+ * Stated rather than hidden: `import("…")` and `require("…")` are matched by keyword, not by line
+ * anchor, so a comment that spells one out verbatim still registers. That is the safe direction —
+ * a false alarm costs a minute, a miss costs the separation claim the whole project rests on.
+ */
 const SPECIFIER_PATTERNS = [
-  /\bfrom\s*['"]([^'"]+)['"]/g,
-  /\bimport\s*['"]([^'"]+)['"]/g,
+  /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?[^'"]*?\bfrom\s*['"]([^'"]+)['"]/g,
+  /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g,
   /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
   /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  /\bexport\s*\*\s*from\s*['"]([^'"]+)['"]/g,
 ]
 
 const importsOf = (raw: string): string[] => {
@@ -81,11 +103,23 @@ const load = (): SourceFile[] =>
       return {
         rel,
         raw,
+        prose: stripComments(raw),
         code: stripNoise(raw),
-        isTest: /\.test\.tsx?$/.test(rel),
+        isTest: /\.(test|spec)\.tsx?$/.test(rel),
       }
     })
     .sort((a, b) => (a.rel < b.rel ? -1 : 1))
+
+/**
+ * Whether a path is the engine's *test code*, for the one rule that needs the wider definition: the test
+ * framework may be imported by a spec beside an engine module and by `src/engine/__tests__/helpers.ts`, because
+ * both are harness and neither ships. Name-only detection once forced `helpers.ts` to be framework-free by
+ * accident rather than by decision — so the directory is part of the rule here, and only here: the platform-
+ * global and network scans below keep iterating `!isTest`, which means a support module that reaches for
+ * `fetch` is still a violation. Widening an exemption is cheap; widening it quietly is not.
+ */
+const isEngineTestCode = (rel: string): boolean =>
+  rel.startsWith('src/engine/__tests__/') || /\.(test|spec)\.tsx?$/.test(rel)
 
 const files = load()
 const engineFiles = files.filter((f) => f.rel.startsWith('src/engine/'))
@@ -106,9 +140,9 @@ describe('engine independence', () => {
   it('imports nothing but its own modules (vitest allowed in its specs)', () => {
     const violations: string[] = []
     for (const file of engineFiles) {
-      for (const spec of importsOf(file.raw)) {
+      for (const spec of importsOf(file.prose)) {
         if (isRelative(spec)) continue
-        if (file.isTest && spec === 'vitest') continue
+        if (isEngineTestCode(file.rel) && spec === 'vitest') continue
         if (ENGINE_BANNED_IMPORT_PREFIXES.some((banned) => spec === banned || spec.startsWith(`${banned}/`))) {
           violations.push(`${file.rel} -> ${spec} (banned)`)
         } else {
@@ -148,18 +182,29 @@ describe('layer boundaries', () => {
     const violations: string[] = []
     for (const file of files) {
       if (ENGINE_CONSUMERS_ALLOWED.some((allowed) => file.rel.startsWith(allowed))) continue
-      for (const spec of importsOf(file.raw)) {
+      for (const spec of importsOf(file.prose)) {
         if (/(^|\/)engine(\/|$)/.test(spec)) violations.push(`${file.rel} -> ${spec}`)
       }
     }
     expect(violations, `components must go through a hook, not the engine:\n${violations.join('\n')}`).toEqual([])
   })
 
-  it('lets hooks use the engine only through its barrel', () => {
+  it('reaches a public surface only through its barrel', () => {
+    // A deep import is not merely untidy: `@/data/build-graph` and `@/engine/graph` skip the surface whose
+    // shape the next phase is allowed to change, and they are invisible to a reader who only sees the barrel.
+    // So every consumer resolves its specifier and gets checked, alias form and relative form alike.
     const violations: string[] = []
-    for (const file of files.filter((f) => f.rel.startsWith('src/hooks/'))) {
-      for (const spec of importsOf(file.raw)) {
-        if (/(^|\/)engine(\/|$)/.test(spec) && spec !== '@/engine') violations.push(`${file.rel} -> ${spec}`)
+    for (const file of files) {
+      for (const spec of importsOf(file.prose)) {
+        const resolved = spec.startsWith('@/')
+          ? `src/${spec.slice(2)}`
+          : posix.normalize(posix.join(posix.dirname(file.rel), spec))
+        for (const { home } of PUBLIC_BARRELS) {
+          if (file.rel.startsWith(home)) continue
+          if (resolved.startsWith(home) && resolved !== `${home}index.ts`) {
+            violations.push(`${file.rel} -> ${spec}`)
+          }
+        }
       }
     }
     expect(violations, `deep imports bypass the public surface:\n${violations.join('\n')}`).toEqual([])
@@ -226,11 +271,70 @@ describe('test coverage contract (live from Phase 1)', () => {
     for (const dir of ENGINE_TESTED_DIRS) {
       for (const file of files.filter((f) => f.rel.startsWith(`${dir}/`) && !f.isTest)) {
         const base = file.rel.slice(dir.length + 1).replace(/\.tsx?$/, '')
-        const collocated = `${dir}/${base}.test.ts`
-        const inTests = `src/engine/__tests__/${base}.test.ts`
-        if (!present.has(collocated) && !present.has(inTests)) missing.push(`${file.rel} (expected ${inTests})`)
+        const candidates = [
+          `${dir}/${base}.spec.ts`,
+          `${dir}/${base}.test.ts`,
+          `src/engine/__tests__/${base}.spec.ts`,
+          `src/engine/__tests__/${base}.test.ts`,
+        ]
+        if (!candidates.some((candidate) => present.has(candidate))) {
+          missing.push(`${file.rel} (expected one of: ${candidates.join(', ')})`)
+        }
       }
     }
     expect(missing, `untested engine modules:\n${missing.join('\n')}`).toEqual([])
+  })
+})
+
+describe('the guard itself', () => {
+  it('widens the framework exemption to the engine\'s test directory, and no further', () => {
+    const helpers = files.find((f) => f.rel === 'src/engine/__tests__/helpers.ts')
+    if (helpers === undefined) return expect.fail('src/engine/__tests__/helpers.ts went missing from the scan')
+    expect(isEngineTestCode(helpers.rel), 'the test-support module may import vitest').toBe(true)
+    expect(helpers.isTest, '…but it is not a spec, so it is still scanned as shipped code').toBe(false)
+    // A shipped module must not inherit the exemption by being near a test.
+    expect(isEngineTestCode('src/engine/algorithms/dijkstra.ts'), 'implementation code').toBe(false)
+  })
+
+  it('keeps every file under src/engine/__tests__ in scope for the no-network and no-globals scans', () => {
+    // Tripwires, not restatements: the two rules above read `engineFiles` (everything under `src/engine`,
+    // spec or not) and `scannableFiles` (everything outside `src/test` whose name says it is *not* a test),
+    // so a change to either predicate — most likely someone teaching `isTest` about the `__tests__`
+    // directory, which is the tempting generalisation — would drop the engine's support modules out of the
+    // scan silently. This fails instead. Widening an exemption to the test framework is one thing; widening
+    // it to `fetch` would end the "no backend" claim, and `PLATFORM_GLOBALS_IN_ENGINE` is what the
+    // `engineFiles` set is there to enforce on files like this one.
+    const support = files.filter((f) => f.rel.startsWith('src/engine/__tests__/'))
+    expect(support.length, 'the engine has a test-support directory to scan').toBeGreaterThan(0)
+    for (const file of support) {
+      expect(engineFiles.some((f) => f.rel === file.rel), `${file.rel} in the platform-global scan`).toBe(true)
+      expect(scannableFiles.some((f) => f.rel === file.rel), `${file.rel} in the no-network scan`).toBe(!file.isTest)
+    }
+  })
+
+  it('reads specifiers from import/export statements, not from prose', () => {
+    // Three separate false alarms produced this test: a doc comment saying `indistinguishable from
+    // "not added yet"`, a template literal in a test message mentioning the engine alias, and a
+    // sentence that wrapped across two lines between two quoted phrases. Each one reported an
+    // import that did not exist, and a guard that cries wolf gets an exception added to it.
+    const prose = [
+      'const message = `exported from "@third-party" is the rule`',
+      "expect(value, 'see from \"phantom-pkg\"').toBe(true)",
+      'export const ok = 1',
+    ].join('\n')
+    expect(importsOf(prose)).toEqual([])
+
+    const code = [
+      "import { x } from 'real-package'",
+      'import type { Y } from',
+      "  '../deep/path'",
+      "import 'side-effect'",
+      "export { z } from 're-exported'",
+    ].join('\n')
+    // Both sides sorted by code point, because `-` sorts before `a` and an expectation written in
+    // reading order is not an expectation written in sort order.
+    const found = importsOf(code).sort()
+    const wanted = ['../deep/path', 'real-package', 're-exported', 'side-effect'].sort()
+    expect(found).toEqual(wanted)
   })
 })

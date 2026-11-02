@@ -1,6 +1,9 @@
-/* Design tokens. Phase 0 sets the palette and rhythm; the map's own tokens
-   (route colour, explored-cell colour, building stroke) land with Phase 2 when
-   there is something on screen to tune them against. */
+/* Design tokens — the only place a colour or a spacing value is written down.
+
+   Two rules the rest of the project depends on:
+   1. every spacing and radius is a multiple of 4px (`--space-*`), so components snap to one grid;
+   2. the map has its own tokens (`--map-*`, `--walk-*`, `--route-*`) because a route colour has to read
+      against a *faded* base rather than against a page, and light/dark invert the relationship. */
 
 :root {
   color-scheme: light dark;
@@ -9,49 +12,107 @@
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 
-  --bg: #eef2f4;
+  /* 4px grid. Names are steps, not purposes, so a 12px gap is `--space-3` here and in the map. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --bg: #eef1f6;
   --surface: #ffffff;
-  --surface-2: #f6f8fa;
-  --ink: #0f1c22;
-  --ink-soft: #4a6069;
-  --ink-faint: #7d919a;
-  --line: #d6e0e4;
-  --accent: #0f766e;
+  --surface-2: #f7f8fc;
+  --ink: #171a2b;
+  --ink-soft: #4b5068;
+  --ink-faint: #868ca6;
+  --line: #dcdfe9;
+  --accent: #4f46e5;
   --accent-ink: #ffffff;
-  --warn-bg: #fff4e0;
-  --warn-line: #e9b96b;
-  --warn-ink: #6b4a12;
+  --accent-soft: #eef0fe;
+  --warn-bg: #fff7e6;
+  --warn-line: #eab308;
+  --warn-ink: #713f12;
+  --error: #b91c1c;
   --ok: #15803d;
 
-  /* Map: a dark "blueprint" plate so traced geometry reads clearly. */
-  --map-bg: #0c2a2f;
-  --map-grid: rgba(94, 234, 212, 0.14);
-  --map-grid-major: rgba(94, 234, 212, 0.3);
-  --map-ink: #d7f5ef;
+  /* The plate: a faded paper base, so traced geometry reads as *under* the route. */
+  --map-bg: #f4f6fb;
+  --map-grid: rgba(79, 70, 229, 0.05);
+  --map-grid-major: rgba(79, 70, 229, 0.11);
+  --map-ink: #171a2b;
+  --map-halo: #f4f6fb;
 
-  --radius-s: 6px;
-  --radius-m: 10px;
+  /* A road only reads if the casing is a shade the fill can push against: slate against white, not
+     silver against paper. `--walk-case-dark` is the second, wider halo that keeps overlapping paths from
+     merging into one ribbon. */
+  --walk-case: #93a0b8;
+  --walk-fill: #ffffff;
+  --walk-case-dark: #7e8ba6;
+
+  --building-fill-opacity: 0.16;
+  --building-stroke-opacity: 0.85;
+
+  --route: var(--accent);
+  --route-alt: #ea580c;
+  --route-explored: rgba(79, 70, 229, 0.12);
+
+  /* The two pins are the only colours on the map that are not data: green is "where you are standing", coral
+     is "where you stop". Neither may be a zone colour, or a reader cannot tell a destination from a quad, and
+     the file's `zones[].color` values are chosen before these two exist. */
+  --route-start: #15803d;
+  --route-end: #ef6a45;
+
+  --radius-s: 4px;
+  --radius-m: 8px;
   --radius-l: 16px;
-  --gap: 12px;
-  --shadow: 0 1px 2px rgba(15, 28, 34, 0.06), 0 8px 24px -12px rgba(15, 28, 34, 0.18);
+  --gap: var(--space-3);
+  --shadow: 0 1px 2px rgba(23, 26, 43, 0.06), 0 8px 24px -12px rgba(23, 26, 43, 0.18);
+  --shadow-raised: 0 2px 4px rgba(23, 26, 43, 0.08), 0 12px 28px -14px rgba(23, 26, 43, 0.3);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+
+  /* Zone colours come from the data file, not from here — see `zones[].color` in docs/SCHEMA.md, so
+     replacing campus.json recolours the map and the legend together with no code change. */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0a1417;
-    --surface: #101f24;
-    --surface-2: #16292f;
-    --ink: #e6f1f3;
-    --ink-soft: #a9c3ca;
-    --ink-faint: #7f9aa2;
-    --line: #22383f;
-    --accent: #5eead4;
-    --accent-ink: #06231f;
+    --bg: #0f1017;
+    --surface: #171a26;
+    --surface-2: #1e2231;
+    --ink: #e8eaf5;
+    --ink-soft: #a9aec5;
+    --ink-faint: #757b95;
+    --line: #2a2f42;
+    --accent: #a5b4fc;
+    --accent-ink: #1e1b4b;
+    --accent-soft: #232449;
     --warn-bg: #2a2313;
-    --warn-line: #6d5626;
-    --warn-ink: #f0d9a8;
-    --map-bg: #071b1f;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+    --warn-line: #a16207;
+    --warn-ink: #fde68a;
+    --error: #fca5a5;
+    --ok: #4ade80;
+
+    --map-bg: #12141f;
+    --map-grid: rgba(165, 180, 252, 0.06);
+    --map-grid-major: rgba(165, 180, 252, 0.13);
+    --map-ink: #e8eaf5;
+    --map-halo: #12141f;
+
+    --walk-case: #59627f;
+    --walk-fill: #cdd3e6;
+    --walk-case-dark: #3d4560;
+
+    --building-fill-opacity: 0.26;
+    --building-stroke-opacity: 0.7;
+    --route-alt: #fb923c;
+    --route-explored: rgba(165, 180, 252, 0.14);
+
+    /* Both pins lighten for the dark plate; `--route` already does, via `--accent`. A green that reads on white
+       is mud on ink, and #4ade80 is the same hue one step up. */
+    --route-start: #4ade80;
+    --route-end: #ff8a68;
   }
 }

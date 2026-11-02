@@ -15,7 +15,7 @@ to keep that true.
 | node `x`,`y`, building `footprint`, surface `ring` | world units = SVG user units, origin top-left, +y down |
 | `canvas.width/height` | the viewBox, i.e. the drawing extent |
 | `canvas.pixelsPerMetre` | the one bridge to reality: `metres = worldUnits / pixelsPerMetre` |
-| edge `metres` | distance along the walkway; omitted ⇒ derived from the two nodes and the scale |
+| edge `metres` | distance along the walkway; omitted ⇒ derived from the two nodes and the scale. Stating it is opt-in, and a stated length *below* the straight line between its ends is an error (`shorter-than-crow-flight`) — a path may bend, it may not shrink |
 
 `metadata.scaleSource` records *how* the scale was obtained (`none`, `two-point-calibration`
 from the map editor, `survey-plan`, `gis`). Distances are only as trustworthy as that field,
@@ -54,13 +54,50 @@ function over them, not a new algorithm.
 
 ## Validation (Phase 2, `npm run map:validate`)
 
-Errors, i.e. build-breaking: unknown node/edge ids, self-loops, duplicate ids,
-`metres <= 0` or non-finite coordinates, `crowd` outside 0–1, an edge whose endpoints are
-both non-junction places, a building with no reachable entrance.
+[`docs/SCHEMA.md`](SCHEMA.md) holds the full matrix — one code per issue, severity, and the exact
+trigger. In short:
 
-Warnings: isolated nodes, a node outside the canvas, a disconnected component (reported
-with its size — union-find answers that in near-linear time), a building whose footprint is
-not a simple ring.
+Errors, i.e. build-breaking: unreadable `schemaVersion`, a missing top-level block, duplicate ids
+(anywhere in the file, one flat name space), unknown node/edge ids, self-loops, a stated `metres` shorter than the crow-flight, `metres <= 0` or
+non-finite coordinates, `crowd` outside 0–1, a building with no reachable entrance, an empty graph.
+
+Warnings, i.e. printed but passable: isolated nodes, a node outside the canvas, a disconnected
+component (reported with its size — union-find answers that in near-linear time), a building whose
+footprint is not a simple ring, a stated length that disagrees with the coordinates by over 15%,
+and an edge whose endpoints are both non-junction places.
+
+That last one started life as an error. It is a warning because real campuses have plazas between
+two buildings, and forbidding the edge would force a fake junction node into the data just to satisfy
+the checker — a placeholder vertex that search would never show and routing would pass through. The
+cost of allowing it is a vaguer turn instruction, so it is reported rather than rejected. The shipped
+placeholder deliberately keeps two of them, one per reason:
+
+- **`e-sports-ground--courts`** — the ground and its basketball courts are both open-air places with
+  no path between them, so a junction would be a vertex that stands for nothing. The turn
+  instruction is honest as it is: *"across the ground to the courts"*.
+- **`e-restroom-s--gate-south`** — the south restroom sits in the gate's wall. Inserting a junction
+  to keep the graph pure would describe a plaza that does not exist, and the digitised file will
+  have the same shape when the real campus replaces this one.
+
+Both are warnings rather than silence for exactly that reason: they say *"check that this is a plaza
+and not a missing path"*, which a human should answer once per campus, not a rule that rejects the
+file.
+
+## Junction labels are bookkeeping, not prose
+
+Every node row needs a `label`, and for a `kind: "junction"` the label in this file is a lowercase shorthand
+(`acad c`, `quad s`, `east n`) written for whoever is reading the JSON or a tooltip, not for a walker. Two
+things refuse to print one, and they refuse for the same reason:
+
+- the **marker layer** hands `planMarkers` only vertices whose `kind !== 'junction'`, so a junction never gets a
+  label on the plate;
+- **`routeLegs`** returns `landmark: ''` for a junction corner (see `ALGORITHMS.md` §11), so a junction never
+  gets one in a direction sentence either.
+
+A real digitised file can do as it likes — if its junctions are named things a person would recognise ("the
+banyan corner"), rename them in the data and the map and the prose will both start showing them, with no code
+change. What neither will do is invent a name from an id: `buildGraph`'s label fallback is the id, and the id is
+exactly the string no one can find on a map.
 
 ## Replacing the placeholder with the real campus
 

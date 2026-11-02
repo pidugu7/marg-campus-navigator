@@ -9,6 +9,20 @@
  * in the type system — means a typo in hand-edited JSON produces
  * "edge e17 references unknown node j-13", not a compiler error 400 lines away.
  *
+ * The loose unions are not only a philosophy, they are forced. Vite/TS reads a
+ * `.json` import by widening every string to `string` — no literal types — so a
+ * field declared as `'a' | 'b'` here can never be satisfied by the imported
+ * file, and `export const campus: CampusFile = campusJson` would fail for the
+ * one and only reason that the data is real. `kind`, `attrs.surface` and
+ * `SurfaceSpec.kind` are `string` for that reason; each is checked against the
+ * list above it in the validator, and each has a `docs/SCHEMA.md` issue code.
+ *
+ * Tuples are the same story: an imported JSON array is `number[]`, never
+ * `[number, number]`, so footprint rings are `number[][]` and "every point is
+ * an [x, y] pair" is issue `bad-ring` rather than a type. The rule this file
+ * follows is therefore mechanical: **declare only what a JSON file can prove**,
+ * and let the builder own everything else.
+ *
  * Coordinate space: SVG user units, origin top-left, +y downwards, matching
  * `canvas` below. `canvas.pixelsPerMetre` is the only conversion factor between
  * drawing space and the real world; `metres` on an edge is derived from it when
@@ -77,7 +91,11 @@ export interface ZoneSpec {
 export interface NodeSpec {
   id: string
   label: string
-  kind: 'junction' | 'place' | 'gate' | 'entrance'
+  /**
+   * `junction` | `place` | `gate` | `entrance`, as a string: see the note on JSON
+   * widening above. A value outside those four is issue `bad-kind`.
+   */
+  kind: string
   x: number
   y: number
   zone?: string
@@ -85,6 +103,12 @@ export interface NodeSpec {
   category?: string
   /** Alternate spellings/abbreviations a person might type ("lib", "BCA"). */
   aliases?: string[]
+  /**
+   * Small enough that the map should not spend a label on it until you are close.
+   * Draw-only: staging never affects search or routing, so an ATM is still a
+   * perfectly good destination at zoom level 1.
+   */
+  minor?: boolean
   tags?: string[]
 }
 
@@ -95,7 +119,8 @@ export interface EdgeAttrSpec {
   lit?: boolean
   /** 0..1. Out-of-range values are a validation error, not a clamp. */
   crowd?: number
-  surface?: 'paved' | 'covered' | 'gravel' | 'grass' | 'stairs'
+  /** `paved` | `covered` | `gravel` | `grass` | `stairs`. Unknown → `bad-surface`. */
+  surface?: string
   /** rise/run as a signed fraction. */
   slope?: number
 }
@@ -114,8 +139,12 @@ export interface BuildingSpec {
   id: string
   label: string
   zone?: string
-  /** Closed ring of world-space points, [x, y] pairs, no repeated last vertex. */
-  footprint: [number, number][]
+  /**
+   * Closed ring of world-space points, no repeated last vertex. Each entry is an
+   * `[x, y]` pair — arity is checked, not typed, because JSON proves only
+   * `number[]`. Fewer than three points, or a ragged point, is issue `bad-ring`.
+   */
+  footprint: number[][]
   /** Vertices that put you inside this building when routed to it. */
   entryNodeIds: string[]
   levels?: number
@@ -125,8 +154,10 @@ export interface BuildingSpec {
 export interface SurfaceSpec {
   id: string
   label: string
-  kind: 'lawn' | 'water' | 'plaza' | 'parking' | 'construction'
-  ring: [number, number][]
+  /** `lawn` | `water` | `plaza` | `parking` | `construction`. Unknown → `bad-surface`. */
+  kind: string
+  /** Same shape as `BuildingSpec.footprint`: `[x, y]` pairs, checked not typed. */
+  ring: number[][]
 }
 
 export interface CampusFile {
