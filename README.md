@@ -5,16 +5,19 @@ Data Structures &amp; Algorithms course project. The map is hand-drawn SVG; ever
 algorithm that makes it work is written by hand in this repo.
 
 - **Campus modelled:** Amrita Vishwa Vidyapeetham, Bengaluru — Amrita Viha, Ede Village,
-  Karnataka (geometry is placeholder data until Phase 2/7 put real shapes in it)
+  Karnataka (the geometry is a hand-built synthetic layout, labelled as such in the UI;
+  Phase 7's editor replaces it with a traced one and no code changes)
 - **Stack:** React 19 + Vite 8 + TypeScript 5.9, Vitest 4
 - **Backend:** none. The campus dataset is a bundled import, so the built app runs from
   any static host — and there is no network call to fail during a demo.
 - **Algorithm libraries:** none. `package.json` is checked by a test, not by trust.
 
-> **Current phase: 1 — data structures.** The heap, trie, union-find, LRU cache and adjacency
-> graph are written and tested (95 tests). There is still no routing, and the map data is an
-> explicitly-labelled placeholder. See [docs/PHASES.md](docs/PHASES.md) for what is real versus
-> planned.
+> **Current phase: 2 — the campus model and the map.** The data structures are written and
+> tested, `src/data/campus.json` describes a 39-node campus, `npm run map:validate` checks it
+> against [docs/SCHEMA.md](docs/SCHEMA.md), and the SVG map pans, zooms (wheel and pinch), stages
+> its labels by zoom level, shows an icon badge per place type, describes anything you hover, tap
+> or tab to, and carries a legend. **There is still no routing** — Dijkstra and A\* arrive in
+> Phase 3. 250 tests; see [docs/PHASES.md](docs/PHASES.md) for what is real versus planned.
 
 ## Quick start
 

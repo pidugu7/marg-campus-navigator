@@ -24,6 +24,17 @@ Two halves with a one-way door between them.
 Direction is strictly downward. The engine is a leaf: it has no imports pointing back
 out, which is what makes it testable and reusable without a DOM.
 
+### Inside `src/ui`: pure modules, and components that only draw
+
+The map is split a second time, on a different axis: **geometry scales with the plate, screen objects
+do not.** `view.ts` (the camera), `marker-plan.ts` (who gets a label), `tip-content.ts` (what a tooltip
+says) and `icons.ts` (which glyph means what) are plain functions over numbers and strings, and they are
+in `coverage.include` beside the engine, because a decision that can be reasoned about can be tested.
+The `.tsx` layers and `use-viewport.ts`/`use-tooltip.ts` hold the parts that need a browser —
+`getBoundingClientRect`, `ResizeObserver`, focus — and they are *excluded by name*, with the reason in
+`vite.config.ts`, rather than quietly omitted from the number. Phase 5 adds jsdom and they join the
+report.
+
 ## What `npm test` proves
 
 `src/test/architecture.test.ts` scans source text (comments and string literals stripped

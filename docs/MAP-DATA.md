@@ -70,8 +70,18 @@ That last one started life as an error. It is a warning because real campuses ha
 two buildings, and forbidding the edge would force a fake junction node into the data just to satisfy
 the checker — a placeholder vertex that search would never show and routing would pass through. The
 cost of allowing it is a vaguer turn instruction, so it is reported rather than rejected. The shipped
-placeholder deliberately keeps two of them (`sports-ground`–`courts`, `restroom-s`–`gate-south`) so
-the warning path is exercised by real data, not only by a fixture.
+placeholder deliberately keeps two of them, one per reason:
+
+- **`e-sports-ground--courts`** — the ground and its basketball courts are both open-air places with
+  no path between them, so a junction would be a vertex that stands for nothing. The turn
+  instruction is honest as it is: *"across the ground to the courts"*.
+- **`e-restroom-s--gate-south`** — the south restroom sits in the gate's wall. Inserting a junction
+  to keep the graph pure would describe a plaza that does not exist, and the digitised file will
+  have the same shape when the real campus replaces this one.
+
+Both are warnings rather than silence for exactly that reason: they say *"check that this is a plaza
+and not a missing path"*, which a human should answer once per campus, not a rule that rejects the
+file.
 
 ## Replacing the placeholder with the real campus
 

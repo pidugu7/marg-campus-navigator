@@ -21,9 +21,9 @@ wait. Nothing below is "already done" unless it has a log entry with verificatio
 | **0** ✅ | scaffold, engine contract, architecture guards, placeholder dataset | `npm run check` green; deps proven allowed; guard proven to fail on planted violations |
 | **1** ✅ | min-heap, trie, union-find, LRU cache, adjacency index | unit tests per structure incl. invariants and property tests; no UI at all |
 | **2** | real `campus.json` (synthetic Amrita layout), `build-graph.ts`, `map:validate`, SVG map with pan/zoom, zones/buildings/walkways/labels | map renders and pans; validator exits 0; graph round-trips through the engine index |
-| **3** | BFS, DFS, Dijkstra, A\*, path post-processing, turn-by-turn | A\* ≡ Dijkstra ≡ brute-force oracle on every fixture pair; A\* expands ≤ Dijkstra; DFS cut-vertices verified by deletion |
+| **3** | BFS, DFS, Dijkstra, A\*, path post-processing, turn-by-turn, **and the route UI that shows them**: the path on the plate, the step list, origin/destination chosen from a plain select of place ids | A\* ≡ Dijkstra ≡ brute-force oracle on every fixture pair; A\* expands ≤ Dijkstra; DFS cut-vertices verified by deletion; a route is visible on the map at 360, 768 and 1440 px, and its step list names the same node ids in the same order |
 | **4** | `router.ts`, cost profiles, LRU wiring, `scripts/bench.mjs` | profile switch changes the chosen route for a defensible reason; cache hit rate visible in the UI; benchmark table (with machine info) generated into `docs/ALGORITHMS.md` |
-| **5** | search UX: trie typeahead, pick origin/destination, swap, algorithm + explored-region overlay | 3-char typeahead with keyboard nav; the explored overlay makes A\* vs Dijkstra visible side by side |
+| **5** | search UX: trie typeahead, the picker that replaces Phase 3's `<select>`, swap, algorithm + explored-region overlay | 3-char typeahead with keyboard nav; the explored overlay makes A\* vs Dijkstra visible side by side |
 | **6** | analysis: closure resilience (union-find), articulation points (DFS), accessibility summary | each claim computed by the engine and covered by tests, not authored by hand |
 | **7** | **map editor**: upload a map image, two-point scale calibration, place/edit nodes, draw/edit edges with attributes, live validation, export `campus.json` | a real campus can be digitised without editing JSON; exported file passes `map:validate` and reloads identically |
 | **8** | polish + delivery: a11y pass, mobile layout, empty/error states, GitHub Pages workflow in the README, final doc pass | Pages deploy wired through Actions; `npm run preview` documented; no console errors |
@@ -54,11 +54,17 @@ is the fallback, and I will say so in the report rather than quietly reorder.
    sources; `src/**` must not have Node types available at all. One project per runtime, and
    the type system enforces the split instead of the tests being the only defence.
 6. **`no-restricted-imports` has no `@/*/*` deep-import pattern.** It would have banned
-   side-effect imports like `@/styles/app.css`. The barrel-only rule for the engine lives in
-   the test, where it can be precise about *who* is importing.
+   side-effect imports like `@/styles/app.css`. The barrel-only rule lives in the test instead,
+   where it can be precise about *who* is importing — and since Phase 2's cp3 it covers both
+   public surfaces (`@/engine` and `@/data`), not just the engine's.
 7. **`server.allowedHosts`/`preview.allowedHosts: ['.e2b.app']`** in `vite.config.ts`: the
    sandboxed live preview reaches the dev server through a proxied hostname that Vite's host
    check would otherwise reject. Harmless locally, required to demo here.
+8. **The route UI moved from Phase 5 into Phase 3** (asked for at Phase 2's review). It was
+   always going to be the *proof* of the algorithms: a Dijkstra that only passes unit tests is a
+   function, and a Dijkstra whose path is drawn over the walkways it followed is a result. Phase 3
+   therefore ends with a `<select>` of place ids as the endpoint picker — deliberately boring, and
+   replaced by the trie-backed typeahead in Phase 5, which is where the search work belongs.
 
 ## Log
 
@@ -335,3 +341,58 @@ as dust and invite a mis-tap), and walkway casings lose a pixel.
 ```
 npm run check → typecheck · lint · 207 tests (11 files) · build ok
 ```
+
+**Checkpoint 4 — badges, tooltips, staged labels, the legend · 2026-11-02**
+
+Four pieces, and one rule underneath them: **geometry scales with the plate, screen objects must not.**
+`icons.ts` maps the data's 12 categories to Lucide glyphs (plus a kind-level fallback for an
+`entrance`, which has no category because it is not searchable), and `icons.spec.ts` checks the table
+against `campus.json` itself, so an unmapped category fails the build instead of quietly drawing a dot.
+`use-tooltip.ts` keeps one state for hover, tap and focus; the rule is the pointer *type* — a mouse's
+tip closes on leave, a finger's stays until you tap elsewhere or press Escape — because a tap's
+`pointerleave` fires the instant the finger lifts. `marker-plan.ts` declines to draw what will not fit,
+reserving the **32 px tap target** rather than the 26 px badge, so no two hit areas can overlap at any
+width; `map-legend.tsx` lists only the zones and glyphs the file actually uses, and states the baseline
+`attributeLines` treats as ordinary, derived from `DEFAULT_EDGE_ATTRIBUTES` rather than retyped.
+
+Native `<title>` is gone from all three layers: it cannot be styled, cannot be dismissed, and does not
+exist on a phone. Its text moved into `tip-content.ts` as a pure function, where the wording is a claim
+that can be tested — one decimal for metres, and **only deviations from the defaults**, so a step-free,
+lit, paved, flat segment says its length and nothing else.
+
+**What the numbers say.** Same twelve places, measured rather than eyeballed: **20 of 20 markers placed
+at 1440 px, 19 at 768, 12 at 360** (8 hidden, 7 losing only their text). That is the 360 px overflow
+question answered as an assertion, and it is why the legend ends with "N markers need more zoom" instead
+of leaving a person to discover it.
+
+**Two things coverage exposed, both fixed by deleting.** `tipSide` had a third branch whose true arm was
+unreachable by construction, and `attributeLines` took a `baseline` parameter that no caller passed — it
+existed only so a test could. Both are gone, `WORDING` became a total `Record<SurfaceKind, string>` so an
+unworded surface is a compile error rather than a tooltip reading "tarmac", and the four pure map modules
+now read 100 % statements / 100 % branches (98.6 % across the folder, the remainder being `use-tooltip`'s
+React wiring, which is excluded by name and documented).
+
+Checked the two themes numerically rather than by eye: label on halo 15.9:1 light / 15.3:1 dark, glyph on
+badge plate 7.9:1 both. The legend's notes were on `--ink-faint` at **3.3:1 / 4.1:1** — under AA for 10 px
+text — so they moved to `--ink-soft`.
+
+```
+npm run check → typecheck · lint · 250 tests (14 files) · build ok
+```
+
+**Checkpoint 5 — responsive pass, docs, and the phase's close-out · 2026-11-02**
+
+Docs brought level with the code, which is the part of this project that rots first: the README's "current
+phase" block now describes what actually runs (and says outright that there is still no routing);
+`docs/MAP-DATA.md` names both `place-to-place` warnings *by edge id* with the reason each is intentional,
+so the file's two warnings read as a decision rather than as leftover noise; `docs/ARCHITECTURE.md` gained
+the "geometry scales, screen objects do not" split inside `src/ui`, including why four modules are in
+`coverage.include` and why the components are excluded **by name**; and the plan's Phase 3 row now carries
+the route UI, with the reason in the deviations list.
+
+The 360 / 768 / 1440 pass is a set of rules rather than three screenshots, because a rule fails a build
+and a screenshot fails nobody: the fit camera covers the canvas at aspects 0.4 → 3.2 (`view.spec.ts`); the
+marker plan is measured at all three plate sizes; the plate is `5/4` on a phone because a taller one could
+only add empty margin above and below a clamped camera; junction dots and the gesture hint are dropped
+under 640 px; every control is a multiple of 4 px (`--space-*`, 32 px buttons, 32 px tap targets, 8 px
+label gap); and the legend is capped at `min(340px, 62%)` so it cannot outwidth the plate it sits on.
