@@ -922,7 +922,9 @@ assumed positive), which is the arm that exists for an admissible-but-inconsiste
 component paints no hue of its own, and the guard asserts that — so the table, the legend and the map can be
 matched by pattern alone. The hues live only in `map.css`.
 
-**Tests: 630 in 40 files**, up from 571 in 34. Composition: 25 `ui/compare/compare-plan.spec.ts`, 8
+**Tests: 631 in 40 files**, up from 571 in 34 — the commit message says 630 because it was written one test
+before the last one landed (the arm that refuses to credit A* with work it did not save); the number here is the
+number `npm run check` prints. Composition: 25 `ui/compare/compare-plan.spec.ts`, 8
 `compare-table.spec.ts`, 4 `compare-legend.spec.ts`, 6 `layers/compare-layer.spec.ts`, 8
 `ui/route/route-controls.spec.ts` (new), 7 `src/test/compare-campus.spec.ts`, and 2 more in
 `src/test/route-styles.spec.ts`. Nothing removed and nothing relaxed: `vitest list` was diffed against a
