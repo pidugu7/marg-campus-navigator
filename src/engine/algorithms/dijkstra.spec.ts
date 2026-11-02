@@ -132,7 +132,7 @@ describe('dijkstra, pinned', () => {
     expect(result.minutes).toBe(0.4)
     expect(result.exploredOrder).toEqual(['n0', 'n1', 'n2', 'n3'])
     expect(result.algorithm).toBe('dijkstra')
-    expect(result.profile).toBe('fastest')
+    expect(result.profile).toBe('shortest')
     expect(result.cached).toBe(false)
     assertIsAPath(index, result, 0)
   })
@@ -406,17 +406,19 @@ describe('dijkstra, the numbers a card shows', () => {
   it('quotes minutes at the profile pace, not at a pace invented in the UI', () => {
     const index = crossing()
     for (const [profile, minutes] of [
-      ['fastest', 2.4],
-      ['shaded', 2.7],
-      ['step-free', 2.9],
-      ['quiet', 2.6],
+      ['shortest', 2.4],
+      ['shaded', 2.6],
+      ['lit', 2.7],
+      ['step-free', 3.2],
+      ['quiet', 2.5],
     ] as const) {
       const result = dijkstra(index, 'a', 'c', { profile })
       expect(result.ok, `${profile} pace`).toBe(true)
       if (!result.ok) continue
       expect(result.minutes, `${profile} pace`).toBe(minutes)
       expect(result.profile).toBe(profile)
-      // 200 m is 200 / 1.4 / 60 = 2.38 minutes, and 200 / 1.15 / 60 = 2.90.
+      // 200 m is 200 / 1.4 / 60 = 2.38 minutes on the baseline pace and 200 / 1.05 / 60 = 3.17 step-free.
+      // The pace is a label, so the metres walked are the same route's metres whichever profile is asked for.
       expect(result.metres).toBe(200)
     }
   })

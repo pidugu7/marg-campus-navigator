@@ -223,7 +223,7 @@ comment text had produced a false alarm in three consecutive checkpoints.
   checks, `removeEdge` on a one-way edge, `lookup` on an unregistered word, `members` out of
   range) is itemised in the PR description instead of being quietly deleted from it.
 
-### Phase 2 — campus model, validator, map · in progress
+### Phase 2 — campus model, validator, map · complete (cp1–cp5, in PR #2)
 
 **Checkpoint 1 — the dataset and its schema · 2026-11-01**
 
@@ -683,3 +683,84 @@ pinned to minimum hops ✓; depth-first pinned against a deletion oracle ✓; ev
 a route ✓; the frontier and explored order recorded per search ✓; turn-by-turn directions with the fold ✓; a
 route on the map with a result card beside it ✓; `docs/ALGORITHMS.md` at one section per algorithm with
 complexity, an invariant and a worked example ✓. Cost profiles, the LRU cache and `npm run bench` are Phase 4's.
+
+
+---
+
+### Phase 4, checkpoint 1 — five cost profiles, and the estimate that has to agree with them
+
+**What the checkpoint is.** Cost profiles in the engine: `shortest`, `shaded`, `lit`, `step-free`, `quiet`, each
+one an `EdgeCost` built from the per-edge attributes, admissibility handled by scaling `h` by the smallest cost
+factor the profile can actually achieve, and a spec where a factor below 1 makes an *unscaled* A\* answer
+wrongly. No UI in this checkpoint — the selector is cp2 — so the deliverable is the engine, its tests and its
+documentation.
+
+**The module, and the guard that asked for it.** `src/engine/routing/cost.ts`: `PROFILES` (label, blurb, the
+attributes it reads, its factor), `PROFILE_ORDER`, `factorFor(profile, attributes)`, `costFor(profile)`, and the
+eight named numbers (`SHADED_BONUS 0.85`, `UNSHADED_PENALTY 1.25`, `LIT_BONUS 0.9`, `UNLIT_PENALTY 1.4`,
+`STAIRS_PENALTY 12`, `NOT_STEP_FREE_PENALTY 2.2`, `ROUGH_SURFACE_PENALTY 1.4`, `SLOPE_FACTOR_PER_GRADE 4`,
+`CROWD_PENALTY_AT_FULL_CONGESTION 1`). The architecture guard refused the commit until `cost.spec.ts` existed
+beside it — same rule as `algorithms/` and `geo/` — which is the guard doing its job rather than an obstacle:
+the file that decides what "best" means is the file least allowed to be untested.
+
+**`fastest` is now `shortest`, and the rename is the honest part.** The name promised speed; the profile never
+had one. With a uniform pace, the fewest minutes and the fewest metres are the same route, so the label was a
+claim about a quantity the objective did not contain. Renamed across the union (`WeightProfile`), `constants.ts`
+(the pace table, whose five paces are now `1.4 / 1.3 / 1.25 / 1.05 / 1.35`), `search-common.ts` (the default),
+and every test that named it — `contract.spec.ts`, `helpers.ts`, `search-parity.spec.ts`, `dijkstra.spec.ts`,
+`search-common.spec.ts`, a comment in `useRoute.ts`, one prose mention in `a-star.spec.ts`. Nothing else in
+those files changed, so the renames are grep-verifiable in the diff. `lit` is the new profile, because "walk
+where you can see" and "walk where it is shaded" are different routes on this map and only one of them was
+modelled.
+
+**The coupling this checkpoint had to introduce.** `RouteSearchOptions` used to accept `profile` and ignore it
+for pricing: `{ profile: 'shaded' }` computed metres and put "shaded" in the result, and a spec was titled
+after that fact ("takes the profile into the result even though cost never read it"). Now `SearchRun` resolves
+`cost = options.cost ?? costFor(profile)`, so the profile is the objective unless a caller writes an explicit
+cost, and `defaultCost` is gone — deleted, not renamed, because `costFor('shortest')` is the same function with
+a name that says which profile it belongs to. The spec that documented the old behaviour is rewritten rather
+than deleted, and now asserts the new numbers: `square()` is entirely unshaded, so the profile is a uniform
+1.25, the cost is 250 for a 200 m walk, the route is unchanged, and the comment says why a uniform factor
+cannot change a winner.
+
+**And the bug that came with it.** A\* had been building its estimate from `options.cost` — which is `undefined`
+for a profile-only request, so the estimate stayed scaled for metres while the search minimised shaded prices.
+That is not a stylistic inconsistency: `h` was inadmissible on `shaded` and `lit`, which pay *below* a metre.
+`cost.spec.ts`'s new fixture found it as a wrong answer — a 146 m shaded corner (124.1) against a 100 m sunlit
+line (125), where the unscaled estimate prices the corner at 130.25 and the search settles the goal first. The
+fix is one accessor: `SearchRun.get cost()`, and `euclideanHeuristic(index, { cost: run.cost, … })`. The
+fixture stays, with the margin of 0.9 asserted, because a test that only checks the happy path is how this
+happened in the first place. `ALGORITHMS.md` §9 and §10 both say it in prose now.
+
+**What the profiles refuse to do.** No profile returns `Infinity`. `EdgeCost` allows it — that is how a closure
+is spelled — but a profile that closed an edge could disconnect the campus, and "step-free" is not a request to
+be told there is no route: a step-free query across the one staircase in `campus.json` answers with a route at
+twelve times its length, which is the honest signal that the staircase is not step-free. `blockedEdges` is the
+closure, and it is already in the cache key and the heuristic's scale. Corollary, pinned: a staircase whose
+surface is `stairs` is *not* also charged the gravel term — the steps are already priced — and the fixture's
+threshold arithmetic (2 000 m of flat beats a 2 740 stair-climb, 3 000 m does not) depends on that
+non-double-counting, so it is an assertion rather than a comment.
+
+**The tests, 14 of them, in `cost.spec.ts`.** `shortest` priced exactly at metres over 300 generated edges;
+1 280 attribute combinations × 5 profiles, every factor finite and > 0, with the *count* asserted so the grid
+cannot silently shrink; `reads` checked both ways (a profile cannot respond to an attribute it does not list,
+and must respond to each one it does); the bonus/penalty pairs; the multiplicative stack; the stair threshold;
+the uniform-factor property; the pace table cross-checked against `minutesFor` for all five; the label/blurb
+budget for a 360 px `<select>`; purity. Then the three that matter: `minCostPerUnit` equal to a hand-written
+restatement of its definition on every trial; **admissibility measured** on 60 seeded graphs × 5 profiles ×
+every vertex against `dijkstra`'s true cost, with the bound's failure message printing both numbers; and
+**parity with Dijkstra on 200 seeded graphs × 5 profiles**, on *varied per-edge attributes* (without which the
+sweep is uniform and proves only that a scale cancels), plus a counter that each of the four preference profiles
+chose a different walk from `shortest` somewhere in those 200 graphs, so the sweep is not vacuous. The walk
+check goes through `neighboursOf` rather than `edgeBetween` because the generator emits duplicate walkways and
+one of them may be closed: a route is a sequence of *arcs*.
+
+**Total: 513 tests in 30 files**, up from 499 in 29. No test was removed; one was rewritten (named above) and
+one file gained its collocated spec, which the guard demanded. `RouteFound.cached` is still always `false` —
+cp5 turns it on.
+
+**Floats, rounded on purpose.** `metres` is rounded to a tenth by the run and `cost` is not, so the factor
+comparisons in this file use `toBeCloseTo(…, 9)` where the arithmetic is binary (12 × 2.2 is not 26.4) and `toBe`
+where both sides are the same expression. An earlier draft of the stair fixture asserted `3796` where the engine
+said `2740`, which was two mistakes in one line: the `roughness` term applied to a `stairs` surface it does not
+cover, and `2300` written where `2740` is the product. Both are in the test now as claims, not as corrections.

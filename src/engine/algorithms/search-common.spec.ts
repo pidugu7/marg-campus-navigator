@@ -334,21 +334,25 @@ describe('SearchRun.expand', () => {
 
 describe('SearchRun result assembly', () => {
   it('rounds the pace to a tenth of a minute and quotes the profile it was told', () => {
-    expect(minutesFor(100, 'fastest')).toBe(1.2)
-    expect(minutesFor(100, 'step-free')).toBe(1.4)
+    expect(minutesFor(100, 'shortest')).toBe(1.2)
+    expect(minutesFor(100, 'step-free')).toBe(1.6)
     expect(minutesFor(0, 'quiet')).toBe(0)
-    // 1.4 m/s is the number the result card shows, so it is pinned here rather than in a component.
-    expect(minutesFor(1400, 'fastest')).toBe(16.7)
+    // 1.4 m/s is the number the result card shows, so it is pinned here rather than in a component. The
+    // step-free pace dropped to 1.05 m/s in Phase 4 because the profile now has a cost to argue with, and a
+    // route that climbs ramps and kerbs is not walked at the same speed as one that does not.
+    expect(minutesFor(1400, 'shortest')).toBe(16.7)
   })
 
-  it('takes the profile into the result even though cost never read it', () => {
+  it('lets the profile pick the cost function, and the pace pick the minutes', () => {
     const result = drainFrom(heapRun(square(), 'a', 'c', { profile: 'shaded' }), 'a', 'c')
     if (!result.ok) return expect(result.reason).toBe('a route was expected')
     expect(result.profile).toBe('shaded')
-    // 200 m at the shaded pace is slower than at 1.4 m/s, and the route is the same one: a profile is a
-    // *reading* of the graph until Phase 4 gives it a cost function to argue with.
-    expect(result.minutes).toBe(2.7)
-    expect(result.cost).toBe(200)
+    // Phase 4's coupling, asserted where its absence used to be documented: `square()`'s edges are all
+    // unshaded, so the profile prices every one of them at 1.25x. The cost is 250 for a 200 m walk, and the
+    // route is the same one, because a factor applied uniformly to a graph cancels in an argmin.
+    expect(result.cost).toBe(250)
+    expect(result.metres).toBe(200)
+    expect(result.minutes).toBe(2.6)
   })
 
   it('measures elapsed time from the injected clock, in whole milliseconds', () => {

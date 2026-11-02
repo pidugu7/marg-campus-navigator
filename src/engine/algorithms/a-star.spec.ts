@@ -294,7 +294,7 @@ describe('a-star, the estimate itself', () => {
   })
 
   it('takes the factor from the profile it is given, not from an assumed 1', () => {
-    // A profile may price a metre of walkway at less than one unit per metre — that is what a "fastest"
+    // A profile may price a metre of walkway at less than one unit per metre — that is what `shaded`"
     // profile with a pace multiplier, or a shaded route that discounts a covered walkway, does. The scale is
     // then part of the measurement: `minCostPerUnit` divides each edge's cost by its drawn length and keeps
     // the smallest, so a uniform factor of 0.2 moves the whole estimate down by 0.2 and admissibility holds.

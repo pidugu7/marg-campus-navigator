@@ -70,7 +70,7 @@ export interface EdgeAttributes {
   readonly stepFree: boolean
   /** Covered or tree-shaded for most of its length (the rain/sun edge flag). */
   readonly shaded: boolean
-  /** Lit at night. Used by the 'quiet' profile together with `crowd`. */
+  /** Lit at night. What the 'lit' profile is graded on; `crowd` is what 'quiet' is graded on. */
   readonly lit: boolean
   /** Typical congestion, 0 (empty) to 1 (jammed). Clamped when built. */
   readonly crowd: number
@@ -145,8 +145,17 @@ export type EdgeCost = (edge: GraphEdge) => number
  */
 export type Heuristic = (from: Point, target: Point) => number
 
-/** Route preferences offered in the UI. Each maps to a cost function. */
-export type WeightProfile = 'fastest' | 'shaded' | 'step-free' | 'quiet'
+/**
+ * Route preferences offered in the UI. Each is a *cost function* over the per-edge attributes —
+ * `routing/cost.ts` owns them — so these are five weightings of one graph rather than five searches.
+ * `shortest` is the baseline: its factor is 1 on every edge, so its cost is exactly the edge's metres, and
+ * every other profile is a deviation from it. (It used to be called `fastest`, which described a promise the
+ * engine did not keep: with a uniform pace the fewest *minutes* and the fewest *metres* are the same route.)
+ *
+ * The pace a route is quoted at is a separate fact, `WALKING_SPEED_MPS`. A profile changes which walk wins;
+ * the pace changes what one minute of it means, and the two are paired by hand on purpose.
+ */
+export type WeightProfile = 'shortest' | 'shaded' | 'lit' | 'step-free' | 'quiet'
 
 /**
  * The searches that can answer a route request.

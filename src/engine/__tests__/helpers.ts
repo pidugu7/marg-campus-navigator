@@ -721,7 +721,7 @@ export function refusalLadder(label: string, search: RouteSearchFn): void {
       expect(result.message).toBe(`"${testCase.offender}" is not a node on this map`)
       // A refusal that never searched says so in every metric rather than leaving them undefined.
       expect(result.algorithm).toBe(label)
-      expect(result.profile).toBe('fastest')
+      expect(result.profile).toBe('shortest')
       expect(result.expanded).toBe(0)
       expect(result.ms).toBe(0)
       expect(result.cached).toBe(false)

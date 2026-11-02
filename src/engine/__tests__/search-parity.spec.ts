@@ -32,7 +32,8 @@ import {
   targetsOf,
   type RouteSearchFn,
 } from './helpers'
-import type { EdgeId, GraphIndex, NodeId, RouteResult, WeightProfile } from '../types'
+import { PROFILE_ORDER } from '../routing/cost'
+import type { EdgeId, GraphIndex, NodeId, RouteResult } from '../types'
 
 interface Search {
   readonly name: string
@@ -86,7 +87,8 @@ describe('the four searches, on the same broken input', () => {
   })
 
   it('carry their own name and the shared profile in every metric', () => {
-    for (const profile of ['fastest', 'shaded', 'step-free', 'quiet'] as const as readonly WeightProfile[]) {
+    // `PROFILE_ORDER` rather than a local list, so a sixth profile cannot quietly miss this sweep.
+    for (const profile of PROFILE_ORDER) {
       for (const search of SEARCHES) {
         const found = search.run(ladderLine(3), 'a', 'c', { cost: LADDER_COST, profile })
         expect(found.algorithm, search.name).toBe(search.name)

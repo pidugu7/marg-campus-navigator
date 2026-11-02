@@ -11,6 +11,7 @@
  * the viva question "what makes A* different from Dijkstra?": one added term in one argument.
  */
 import { COST_EPSILON, WALKING_SPEED_MPS } from '../constants'
+import { costFor } from '../routing/cost'
 import { MinHeap } from '../structures/min-heap'
 import { routeLegs, simplifyLegs, stepsFromLegs } from './path-utils'
 import type {
@@ -28,11 +29,18 @@ import type {
 
 /** Everything a caller may steer. All of it optional, none of it copied. */
 export interface RouteSearchOptions {
-  /** Weight of one edge. Contract: a finite number `> 0`, or `Infinity` to close the edge for this profile. */
+  /**
+   * Weight of one edge. Contract: a finite number `> 0`, or `Infinity` to close the edge for this profile.
+   * Defaults to the profile's own cost function (`routing/cost.ts`), so `{ profile: 'shaded' }` is a shaded
+   * search rather than a shaded *label* on a metres search — which it used to be, and was a footgun with the
+   * same name as a feature. Passing `cost` explicitly still overrides it, which is how a test prices a graph
+   * with a weighting no profile has. Both are held for the whole run, which is what lets the cache key on them
+   * and `minCostPerUnit` measure over the same function the search is using.
+   */
   readonly cost?: EdgeCost
   /** Walkways closed for this query — a detour, roadworks, a gate shut at night. Read by reference. */
   readonly blockedEdges?: ReadonlySet<EdgeId>
-  /** The pace `minutes` is quoted at, and the label the UI shows. Cost never reads it. */
+  /** The weighting the search runs on, and the pace `minutes` is quoted at. See `routing/cost.ts`. */
   readonly profile?: WeightProfile
   /** Record a frontier snapshot per settled vertex (default `true`). Phase 4's benchmark sets `false`. */
   readonly trace?: boolean
@@ -73,8 +81,6 @@ export interface Expansion {
    */
   readonly badCost?: { readonly edgeId: EdgeId; readonly value: number }
 }
-
-const defaultCost: EdgeCost = (edge) => edge.metres
 
 /**
  * Which container each search draws its next vertex from, and that is the complete list of differences
@@ -124,7 +130,9 @@ export class SearchRun {
   #expanded = 0
 
   constructor(index: GraphIndex, from: NodeId, to: NodeId, algorithm: AlgorithmName, options: RouteSearchOptions = {}) {
-    const { cost = defaultCost, blockedEdges, profile = 'fastest', trace = true, now = Date.now } = options
+    // `profile` is destructured before `cost` because `cost`'s default reads it; the order is load-bearing,
+    // and a later `const` in this pattern would be in the temporal dead zone when the default ran.
+    const { profile = 'shortest', blockedEdges, trace = true, now = Date.now, cost = costFor(profile) } = options
     this.#index = index
     this.#algorithm = algorithm
     this.#from = from
@@ -140,6 +148,17 @@ export class SearchRun {
   }
 
   // --- before the search ------------------------------------------------------------------------------
+
+  /**
+   * The cost function this run will price edges with: the caller's if it gave one, otherwise the profile's.
+   * `aStar` needs it to scale its estimate, and it must be *this* one — an `h` measured under a different
+   * function than the one being minimised is not a lower bound, which is the entire admissibility argument in
+   * `docs/ALGORITHMS.md`. Exposing it rather than re-deriving it is what keeps "the profile picked the cost"
+   * true in exactly one place.
+   */
+  get cost(): EdgeCost {
+    return this.#cost
+  }
 
   /**
    * The questions every algorithm must ask before it looks at an edge, in the order it asks them.

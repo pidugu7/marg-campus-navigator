@@ -32,7 +32,8 @@ export interface RouteHookState {
  * Runs the chosen search over `index` and returns its result.
  *
  * No profile and no closures reach the search yet: Phase 3 asks the map for the shortest walk in metres, which
- * is what the options' own defaults answer — `profile: 'fastest'` (a label and a pace for `minutes`, nothing
+ * is what the options' own defaults answer — `profile: 'shortest'`, whose factor is 1 on every edge (a label and
+ * a pace for `minutes`, nothing
  * that reweights an edge) and `cost` left to `defaultCost`, which is the edge's `metres`. The shaded-at-noon and
  * step-free profiles are Phase 4's, and they belong in this file rather than in a component for exactly the
  * reason the guard exists.

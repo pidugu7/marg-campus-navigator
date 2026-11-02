@@ -111,3 +111,19 @@ export {
   type CompassPoint,
   type CostScaleOptions,
 } from './geo/measure'
+export {
+  CROWD_PENALTY_AT_FULL_CONGESTION,
+  LIT_BONUS,
+  NOT_STEP_FREE_PENALTY,
+  PROFILES,
+  PROFILE_ORDER,
+  ROUGH_SURFACE_PENALTY,
+  SHADED_BONUS,
+  SLOPE_FACTOR_PER_GRADE,
+  STAIRS_PENALTY,
+  UNLIT_PENALTY,
+  UNSHADED_PENALTY,
+  costFor,
+  factorFor,
+  type ProfileDefinition,
+} from './routing/cost'

@@ -88,10 +88,23 @@ and refuse the dependency in the first place.
 
 ## Why the engine takes a cost function instead of a profile name
 
-`routing/cost.ts` builds an `EdgeCost` from a `WeightProfile`, and algorithms accept
-`(index, cost, heuristic?)`. That keeps "shortest", "shaded", "step-free" and "quiet"
-four *weightings of one graph* rather than four separate searches — and it is why a new
-profile needs a cost function plus a test, not a new algorithm.
+`routing/cost.ts` maps each `WeightProfile` to a *factor* over one edge's attributes, and the searches accept
+`(index, from, to, { cost?, blockedEdges?, profile? })`. `shortest`, `shaded`, `lit`, `step-free` and `quiet`
+are therefore five weightings of one graph rather than five searches, and a new profile is a factor function
+plus a test — never a new algorithm, and never a re-weighted copy of the graph (the graph is built once, sealed,
+frozen and shared; a profile is a *view* of it, so switching preferences between two searches costs nothing and
+cannot leave a stale weight behind).
+
+The layering has one subtlety worth naming, because Phase 4 found it as a bug rather than as a design note.
+`profile` and `cost` are two spellings of one decision, so exactly one place resolves them: `SearchRun` picks
+`options.cost ?? costFor(options.profile ?? 'shortest')`, and A\* multiplies its Euclidean estimate by
+`minCostPerUnit` measured under `run.cost` — the same resolved function. If the heuristic were instead built
+from `options.cost`, a request with only a profile would minimise shaded prices while estimating metres, and
+`h` would over-reach on any profile that pays a bonus. `src/engine/routing/cost.spec.ts` pins the failure with a
+146 m shaded corner against a 100 m sunlit line, so the coupling survives a refactor that looks like a
+simplification. The rule for anyone extending this: **a cost function reaches a search through `profile` or
+through `cost`, and everything downstream — relaxation, estimate, cache key — reads whichever the run settled
+on.**
 
 `structures/graph.ts` exposes `GraphIndex` (adjacency + precomputed components) as an
 interface, so algorithms never depend on the concrete layout. A CSR array layout can be

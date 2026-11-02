@@ -18,7 +18,7 @@ owes each test).
 | 7 | DFS | `algorithms/dfs.ts` | cycle check, articulation points / bridges | **done** (Phase 3, cp2) |
 | 8 | Dijkstra | `algorithms/dijkstra.ts` | exact weighted shortest path | **done** (Phase 3, cp1) |
 | 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | **done** (Phase 3, cp2) |
-| 10 | cost profiles | `routing/cost.ts` | fastest / shaded / step-free / quiet | pending (Phase 4) |
+| 10 | cost profiles | `routing/cost.ts` | shortest / shaded / lit / step-free / quiet | **done** (Phase 4, cp1) |
 | 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | **done** (Phase 3, cp1 and cp3) |
 | 12 | geometric measure | `geo/measure.ts` | compass words, turn angles, and the A\* scale | **done** (Phase 3, cp1) |
 
@@ -500,7 +500,10 @@ edge rather than per metre lowers the bound by the longest *drawing* on the map,
 remaining cost for every ordered pair with `floydWarshall` — a matrix algorithm that shares no code with a
 search — and checks `h(v, t) ≤ d(v, t)` for every vertex and every target, in both directions of every one-way
 edge, with walkways closed and open. That is the test that would fail if `minCostPerUnit` were replaced by a
-metres-per-unit constant, which is the tempting shortcut §12 exists to prevent.
+metres-per-unit constant, which is the tempting shortcut §12 exists to prevent. And the `cost` it measures with
+is the one the *run* resolved, not the one the caller wrote: since Phase 4 a request can carry only
+`{ profile: 'shaded' }` and still minimise a weighted cost, so an estimate built from `options.cost` would be
+scaled for the wrong quantity — §10 has the fixture, the numbers and the failure.
 
 **Worked example, against §8's table.** The same square: `a(0,0) b(100,0) c(100,-100) d(0,-100)`, 100 m sides,
 a 250 m `a—c` diagonal, one edge id per walkway, cost = metres. `minCostPerUnit` is 1, so `h` is the drawn
@@ -554,6 +557,99 @@ the unplaceable-vertex fallback, and the metric labels. Plus 15 in
 `src/engine/__tests__/search-parity.spec.ts`, which is where "the same broken input refuses identically on all
 four searches" and "all four agree on whether a pair is routable at all" (60 seeded graphs) live: claims about
 the searches *resembling each other*, which no single algorithm's own file can make.
+
+---
+
+## 10. Cost profiles — `routing/cost.ts`
+
+**The idea.** One graph, five opinions about what "best" means. A profile is not a search and not a filter: it
+is a function `EdgeAttributes → number` that multiplies an edge's metres, and the searches never learn why a
+walkway costs what it costs. `costFor('shaded')` returns `(edge) => edge.metres * 0.85 or 1.25`; `dijkstra`
+and A\* then minimise that number and never see a shade flag. This is what makes Phase 4's selector a set of
+`<option>` elements rather than a rewrite: the graph is built once (Phase 2), sealed, frozen, and shared, and
+switching profiles between two searches costs nothing because no weight is ever stored on an edge.
+
+| profile | reads | factor | min | max | what it is chasing |
+| --- | --- | --- | --- | --- | --- |
+| `shortest` | — | `1` | 1 | 1 | the fewest metres; the baseline every other row is quoted against |
+| `shaded` | `shaded` | 0.85 shaded, 1.25 sun | **0.85** | 1.25 | a route you can walk without the sun on it, even though it measures longer |
+| `lit` | `lit` | 0.9 lit, 1.4 unlit | **0.9** | 1.4 | lamps at night; an unlit walkway is avoided, never forbidden |
+| `step-free` | `stairs`, `stepFree`, `surface`, `slope` | 12 × 2.2 × 1.4 × (1 + 4·\|grade\|) | 1 | 73.92 | no steps, then no kerbs, then no loose ground, then no grade |
+| `quiet` | `crowd` | 1 + crowd | 1 | 2 | the emptiest corridor, at up to double its length |
+
+Three things in that table are load-bearing and each has a test: **no profile ever returns `Infinity`** (a
+profile weights, `blockedEdges` closes — the distinction is why a step-free request across the one staircase in
+`campus.json` answers with a route priced at 12× rather than with a refusal, which would be a lie about the
+campus); **every factor is finite and greater than 0** for all 1 280 combinations of the attributes
+`buildGraph` can emit, checked exhaustively rather than sampled; and **`shortest` is identically 1**, so its
+cost is exactly `edge.metres`, which is the sense in which the other four are deviations and the sense in which
+the result card's "Δ against shortest" compares the same quantity the user could have asked for.
+
+**Complexity.** `O(1)` per relaxation — one multiply — and `O(E)` once per A\* run to measure the heuristic's
+scale (§12). No profile changes any algorithm's asymptotics; a step-free search is the same `O((V+E) log V)`
+with a longer constant. `bfs` ignores cost entirely, which is what makes it the control in the compare table:
+its route is the same for every profile, because it counts hops.
+
+**The invariant, and the one that is easy to get wrong.** For every profile `p`, every graph, every query:
+
+1. `cost_p(e) ≥ 0`, finite; `0` on an unreachable pair only.
+2. If `f` is a constant, `argmin` of any two routes is unchanged by `f`. So a profile that finds nothing to
+   vary is a *scale*, and a scale must not re-order comparable routes — `cost.spec.ts` checks this on a fixture
+   where the whole campus is unshaded, and a failure there would mean a profile had stopped being a weighting.
+3. `minCostPerUnit(index, { cost: costFor(p), blockedEdges }) × ‖u − t‖ ≤ cost_p(u ⇝ t)` for every `u`. This is
+   admissibility, and it is the reason the estimate is *measured* instead of assumed.
+
+**Why the estimate has to be scaled.** `h(u) = ‖u − t‖` is a lower bound on *metres*, and A\* is entitled to
+assume it is a lower bound on *the quantity being minimised*. That holds while the quantity is metres — the
+`shortest` profile, and every profile whose factor is ≥ 1 everywhere (`lit`'s 0.9 excepted). It breaks the
+moment a profile pays a **bonus**: on a shaded graph, 100 m of shaded walkway costs 85, so a crow-flight of
+100 m *over-states* the remaining cost, and an over-estimating `h` makes A\* settle the goal before it has
+looked at the corner that beats it. The fix is one number: divide the cheapest cost per unit of drawn length
+off the graph and multiply `h` by it —
+
+```ts
+const scale = minCostPerUnit(index, { cost: run.cost, blockedEdges })   // 0.85 on the shaded campus
+h(u) = scale * euclidean(u, target)
+```
+
+The **minimum**, not the mean: `h` must be a bound at *every* vertex, including the one about to step onto the
+cheapest-per-metre walkway on the map. **Measured, not configured:** `WALKING_SPEED_MPS` and the factor table
+are hand-written numbers, and a hand-written scale drifts the moment someone edits `SHADED_BONUS`. And when the
+measurement finds nothing — an empty graph, or every walkway blocked — it returns `0`, `h ≡ 0`, and A\* is
+Dijkstra with an extra function call, which is the correct degenerate answer rather than a failure.
+
+`a-star.ts` reads the scale from `run.cost`, the cost function the run actually resolves (the caller's, else
+the profile's), and not from `options.cost`. That distinction is a bug this checkpoint found: wiring the profile
+into `cost` while the heuristic kept reading `options.cost === undefined → metres` left the search minimising
+`shaded` prices with an estimate scaled for metres, and `cost.spec.ts`'s new fixture caught it as a wrong
+answer, not as a warning. If a future checkpoint "simplifies" `get cost()` away, the fixture fails: A\*
+returns a 100 m sunlit line where a 146 m shaded corner is 0.9 units cheaper, and the route it prints is one a
+person could walk.
+
+**Worked example — the shade that beats the straight line.** `a = (0, 0)`, `c = (100, 0)`, `b = (96.72,
+40.87)`, so `ab` is 105 m and `bc` is 41 m, both shaded (0.85), and `ac` is a 100 m sunlit line (1.25). The
+true cheapest shaded walk is the corner: `0.85 × 146 = 124.1`, against `1.25 × 100 = 125` for the diagonal.
+
+| step | `g` so far | `h` scaled (× 0.85) | `f` | `h` unscaled | `f` unscaled |
+| --- | --- | --- | --- | --- | --- |
+| settle `a` | 0 | 0.85 × 100 = 85 | 85 | 100 | 100 |
+| offer `b` | 89.25 | 0.85 × 41 = 34.85 | **124.10** | 41 | 130.25 |
+| offer `c` | 125 | 0 | 125 | 0 | 125 |
+| draw off the frontier | — | — | `b` ✓ | — | `c` ✗ — the goal is settled at 125 and the search stops |
+
+Scaled, `b`'s `f` is already the optimal cost, so settling it re-prices `c` at 124.1 and A\* arrives with the
+route Dijkstra found. Unscaled, `c` looks 5.25 units cheaper than the corner and A\* stops on the first
+settlement of the goal — 0.9 units short of optimal, having done *less work*. That last clause is the whole
+lesson: an inadmissible heuristic is not slow, it is fast and wrong. And note how narrow the margin is, because
+the 1.25 penalty caps how far a 0.85 bonus can mislead — which is why the claim is pinned as a test on a
+purpose-built fixture rather than argued from the formula.
+
+**What the profiles do to `minutes`.** Nothing directly. `WALKING_SPEED_MPS` is a second table, keyed by the
+same union so a new profile is a compile error until it has a pace, and it says how the *route that profile
+chose* gets walked: 1.4 m/s for a walk that is simply short, 1.05 for one negotiated over ramps and kerbs. Two
+tables because two facts: the cost decides which walkway wins, the pace decides what a minute of it means. The
+result card shows the profile's name and its pace's consequences, and Δ distances are always quoted in metres
+against `shortest` — a comparison of two routes' lengths, not of two arbitrary units.
 
 ---
 
@@ -694,14 +790,6 @@ is the outcome a reference model is supposed to have.
 
 ---
 
-## 10 — still to come in this phase
-
-**Cost profiles** (Phase 4) are weight functions, not separate algorithms. Everything §6–§9 promise about a
-profile is already half-tested from the search side — `Infinity` closing a walkway and being excluded from the
-heuristic's scale, a non-positive cost refused as `invalid-graph`, `minutes` derived from the profile's pace —
-but the four profiles themselves (`fastest`, `shaded`, `step-free`, `quiet`) are §10's own claims, and
-`non-positive-cost` is the rule that stops a profile from breaking §8's invariant.
-
 ## Benchmarks (Phase 4)
 
 `npm run bench` writes a Markdown table into **Measured results** below. Timings vary by machine,
@@ -720,14 +808,14 @@ table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **499 tests in 29 files** · build ok |
+| `npm run check` | typecheck · lint · **513 tests in 30 files** · build ok |
 | `src/engine` | **262 tests** — structures 77, `algorithms/` 142 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 29), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
 | `src/data` | 86 (`build-graph.spec.ts`) |
 | `src/ui` | **118** — `map` 79 (view 25, marker-plan 15, tip-content 16, icons 8, route-plan 8, route-layer 7), `route` 39 (route-options 13, route-summary 13, route-card 13) |
 | `src/test` | 33 — architecture guard 14, `map:validate` 6, campus routing 6, route styles 5, schema drift 2 |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
 | coverage of the route UI | `route-plan.ts`, `route-summary.ts`, `route-card.tsx`, `route-layer.tsx` all **100 %** statements and branches — the last two are components, measured because `renderToStaticMarkup` needs no DOM; `route-options.ts` 100 / 94.44, its one open arm the sort comparator's `0`, which needs two rows with the same label *and* the same id, so it is documented in `route-options.spec.ts` instead of faked; `route-controls.tsx` 77.77 / 100, and the two uncovered lines are its `onChange` arrows, which only a *dispatched* event runs and there is no DOM to dispatch one with — the gap is left in the report rather than the file being taken out of it |
-| sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 profiles (metres, unit, jittered, `× 0.2`), zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
+| sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 weighting profiles (metres, unit, jittered, `× 0.2`) and again × the 5 shipped cost profiles on per-edge varied attributes, zero-scale equivalence on **60**, measured admissibility on **80**, and profile admissibility on **60** graphs × 5 profiles × every vertex; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
 | the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); `landmarkOf` → 185 legs name something, 1 219 name a junction and therefore say nothing; **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
 | the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
 | `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
@@ -735,4 +823,4 @@ table is a measurement of speed.*
 | the 5 000-vertex line | `dfs.spec.ts`: 5 000 visits, last depth 4 999, no `RangeError` |
 
 The n = 5 000 rank-bound case and the 500/5 000/120-step property trials cited in §1–§5 are Phase 1's and
-still stand; they are included in the 246.
+still stand; they are inside the 513.

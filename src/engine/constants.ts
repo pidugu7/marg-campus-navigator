@@ -17,7 +17,7 @@ export const MIN_SEGMENT_METRES = 0.5
 
 /**
  * Below this, a leg is not worth a sentence of its own — see `simplifyLegs`. 20 m is fourteen seconds at the
- * `fastest` pace: short enough that reading a turn instruction for it costs more attention than making the
+ * `shortest` pace: short enough that reading a turn instruction for it costs more attention than making the
  * turn costs feet. Pinned from both sides of the boundary in `path-utils.spec.ts`, because a threshold that
  * nobody can measure the edge of is a preference dressed as a constant.
  */
@@ -34,11 +34,19 @@ export const COST_EPSILON = 1e-6
  * fallback the type system already knows is unreachable. A new profile is a compile error here until it
  * has a pace, instead of a silent 1.4 m/s.
  */
+/**
+ * The five paces, one per profile. Each is an assumption about how *that* kind of route gets walked — a
+ * family with a pram in shade, a student crossing the campus at night, someone in a wheelchair over ramps and
+ * kerbs — and each is a label, not an input: no cost function reads this table, and `routing/cost.ts`'s
+ * factors never mention minutes. Keyed by the union so a new profile is a compile error here rather than a
+ * silent 1.4.
+ */
 export const WALKING_SPEED_MPS: Readonly<Record<WeightProfile, number>> = {
-  fastest: 1.4,
-  shaded: 1.25,
-  'step-free': 1.15,
-  quiet: 1.3,
+  shortest: 1.4,
+  shaded: 1.3,
+  lit: 1.25,
+  'step-free': 1.05,
+  quiet: 1.35,
 }
 
 export const DEFAULT_EDGE_ATTRIBUTES: EdgeAttributes = {

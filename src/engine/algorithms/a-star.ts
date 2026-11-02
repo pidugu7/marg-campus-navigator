@@ -45,13 +45,18 @@ export function aStar(index: GraphIndex, from: NodeId, to: NodeId, options: ASta
   const refusal = run.checkEndpoints()
   if (refusal !== null) return refusal
 
-  // `exactOptionalPropertyTypes` means the two keys are built conditionally rather than passed through as
-  // `undefined`, which is the right outcome: `minCostPerUnit` distinguishes "no cost function, use metres"
-  // from "a cost function that returns undefined", and so does the object literal.
+  // The cost comes from the run, not from `options`, because they are not the same thing: a request with only
+  // a profile has no `options.cost` at all, yet prices its edges with that profile's factors. Reading
+  // `options.cost` here used to scale the estimate by metres while the search minimised something else, and the
+  // result was an inadmissible `h` that stopped at the goal one expansion too early. `cost.spec.ts` pins it.
+  //
+  // `exactOptionalPropertyTypes` means `blockedEdges` is built conditionally rather than passed through as
+  // `undefined`, which is the right outcome: `minCostPerUnit` distinguishes "no closure set" from "a set that
+  // happens to contain this id", and so does the object literal.
   const estimate =
     options.heuristic ??
     euclideanHeuristic(index, {
-      ...(options.cost === undefined ? {} : { cost: options.cost }),
+      cost: run.cost,
       ...(options.blockedEdges === undefined ? {} : { blockedEdges: options.blockedEdges }),
     })
   const target = index.node(to)

@@ -67,7 +67,7 @@ describe('engine public surface', () => {
     const result: RouteResult = {
       ok: true,
       algorithm: 'a-star',
-      profile: 'fastest',
+      profile: 'shortest',
       expanded: 3,
       ms: 0,
       cached: false,
@@ -76,7 +76,7 @@ describe('engine public surface', () => {
       cost: 95,
       metres: 95,
       hops: 2,
-      minutes: 95 / WALKING_SPEED_MPS.fastest / 60,
+      minutes: 95 / WALKING_SPEED_MPS.shortest / 60,
       steps: [],
       exploredOrder: ['gate-1', 'jquad', 'lib'],
       // Index-aligned with `exploredOrder`: what was still competing when each vertex was drawn off the
