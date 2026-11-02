@@ -196,3 +196,109 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── route form ─────────────────────────────────────────────
+   A select is a select: 32px tall like the map's own buttons, on the same 4px grid, and never wider than the
+   column it is in. The picker row is a 2-column grid with the swap button in the middle so the two fields line
+   up whether they sit side by side (1440) or stacked (360), and the arrow rotates a quarter turn when it moves
+   — a horizontal arrow between two stacked fields would point at nothing. */
+
+.route-form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.route-pickers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-1);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.field-caption {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.picker {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.picker:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.picker:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.picker option:disabled {
+  color: var(--ink-faint);
+}
+
+.route-swap {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.route-swap:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.route-swap:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.route-swap:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.route-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 900px) {
+  /* Stacked: From, To, then the swap — and the arrow turns to say "down", which is what it now does. */
+  .route-pickers {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .route-swap svg {
+    transform: rotate(90deg);
+  }
+}

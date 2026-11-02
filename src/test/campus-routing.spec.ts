@@ -147,6 +147,38 @@ describe('every search, over every pair of named places on the campus', () => {
     }
   })
 
+  it('never names a junction in a sentence, on any pair on this map', () => {
+    // The map draws a label for every vertex except a junction, and `routeLegs` now follows that rule, so a
+    // direction can only name something a reader can find on the plate. The synthetic file gives its 16
+    // junctions lowercase shorthand labels (`acad c`, `quad s`) that are *legible* to a search and useless to a
+    // walker, and this assertion is how the difference gets enforced instead of noticed in a screenshot: it
+    // reads every leg of every route.
+    const junctionLabels = new Set(
+      model.nodes.filter((node) => node.kind === 'junction').map((node) => node.label),
+    )
+    let named = 0
+    let legs = 0
+    for (const from of points) {
+      for (const to of points) {
+        if (from.id === to.id) continue
+        const result = aStar(index, from.id, to.id)
+        if (!result.ok) continue
+        for (const leg of routeLegs(index, result.nodeIds, result.edgeIds)) {
+          legs += 1
+          expect(junctionLabels.has(leg.landmark), `${from.label} → ${to.label}: "${leg.landmark}"`).toBe(false)
+          if (leg.landmark !== '') named += 1
+        }
+        for (const step of result.steps) {
+          expect(step.instruction).not.toMatch(/ at (j-|e-atm|acad|quad|living|east n|park|labs)/)
+        }
+      }
+    }
+    // And the clause still appears, often: a rule that emptied every sentence would be a rule that broke the
+    // feature, so the count is asserted too, next to the number the docs quote.
+    expect(named).toBeGreaterThan(0)
+    expect(named).toBeLessThan(legs)
+  })
+
   it('gives the directions pass nothing to fold, and says why', () => {
     // `simplifyLegs` folds a leg shorter than `MIN_INSTRUCTION_METRES` into its neighbour. The shortest walkway
     // in this file is four times that, so the fold is a no-op on all 380 routes — measured, not assumed. The

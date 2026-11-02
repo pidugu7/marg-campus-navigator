@@ -569,5 +569,56 @@ check` runs) reads the whole picture** — so a checkpoint that touches `src/tes
 command. The barrel comment in `index.ts` already says a missing export means the module is missing an API; this
 time it meant the barrel was missing a name, and the runtime was the one that noticed.
 
+**Coverage note for cp3's own file.** `path-utils.ts` stays at 100 % statements and branches with the fold
+inside it: the `legs.length < 2` early return, both fold directions and the `Math.max` floor are each reached by
+a test above, and no arm of `simplifyLegs` is left to argue about.
+
 **Not in this checkpoint, on purpose.** The route UI (cp4); the result card, the responsive pass and the rest of
 the docs (cp5).
+
+### Phase 3, checkpoint 4 — the route, drawn and picked
+
+**What landed.** The route UI: `src/hooks/useRoute.ts` (the only module in the app that calls a search),
+`src/ui/map/route-plan.ts` + its layer `src/ui/map/layers/route-layer.tsx` (the polyline, the green start disc,
+the coral destination ring), `src/ui/route/route-options.ts` + `route-controls.tsx` (From/To pickers, the
+algorithm `<select>`, the swap button), and a `route` slot in `MapView` between the walkways and the dots. 21
+new specs (`route-plan` 8, `route-options` 13) and one campus-wide property in `campus-routing.spec.ts`;
+**461 tests in 25 files**, `path-utils.ts`/`route-plan.ts` still 100 % statements and branches, `route-options.ts`
+100 % statements with one documented comparator arm.
+
+**One wording bug, found by looking at a picture rather than at a number.** The scratch SSR render (below) printed
+the first real directions list on this campus: `Head north-west to labs`, `Turn left at labs`, `Bear right at
+acad c`. Every one of those named a *junction*, whose label in `campus.json` is lowercase shorthand for the
+data's own bookkeeping — legible to a search, useless to a walker, and never drawn on the plate by the marker
+layer. So `routeLegs` now refuses what the map refuses: `landmarkOf` answers `''` for `kind === 'junction'` and
+the label otherwise, one function with its reason written next to it. Measured over 380 pairs: **1 219 of 1 404
+legs** turn at a junction and now say nothing where they used to print a key; **185** name a place, gate or
+entrance. The two cp1 specs that asserted `'Crossroads'` on a junction corner were updated rather than deleted —
+one of them (`namedRow()`) keeps the same geometry with the corner changed to a `place`, so the test still says
+something about naming *and* now says something about kinds. Documented for the data side in `MAP-DATA.md`
+("Junction labels are bookkeeping, not prose") and for the algorithm side in `ALGORITHMS.md` §11.
+
+**The layer's two rules, both tested without a DOM.** A route containing a vertex the model cannot place is
+**not drawn as a line at all** — joining the ends around the hole would invent a walkway across a building — and
+a one-vertex route (`from === to`, which every search answers with 0 m) draws **one** pin, not two stacked. The
+pins are pixels and the line is world units, so the line uses `vector-effect: non-scaling-stroke` like a walkway
+and the pins use the badge layer's `translate(x y) scale(unitsPerPx)`; that pairing is why this checkpoint needed
+a picture and not just an assertion.
+
+**How the picture was obtained.** No browser is available here and none may be added, so the check is a scratch
+entry (`src/test/scratch-route-preview.tsx`, deleted before the commit) rendered with `react-dom/server` through
+`vite build --ssr`, styled by inlining `dist/assets/*.css` in a CDATA block, rasterised with `sharp` (installed
+in `/tmp`, never in the repo) at 360/768/1440 plate widths. What it proved: the polyline runs on the network and
+not across the blocks, both pins sit on their vertices, and the pin size is the same in all three rasters while
+everything around it scales. What it cannot prove: `librsvg` ignores `vector-effect` and a `background` on an SVG
+root, so widths and the plate colour in these PNGs came from a literal override block — the *browser* is still
+the only judge of the real stylesheet, and the live preview is that judge.
+
+**Boundaries, re-checked.** `route-controls.tsx` imports no `@/engine`: the algorithm names are the hook's
+`RouteAlgorithmChoice` union and the picker rows come from `route-options.ts`; `useRoute` is the single file
+outside `src/engine` allowed to name `aStar`/`dijkstra`/`bfs`, which the architecture guard keeps true. The
+`ALGORITHM_CHOICES` table is keyed `Record<RouteAlgorithmChoice, AlgorithmChoice>`, so a fourth search in the
+engine's union is a compile error here rather than a dropdown that quietly still offers three.
+
+**Not in this checkpoint, on purpose.** The result card, the "no route found" state, the responsive pass and the
+README (cp5).

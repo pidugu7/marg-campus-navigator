@@ -447,3 +447,55 @@
     transition: none;
   }
 }
+
+/* ── the route ─────────────────────────────────────────────────────────────
+   Drawn over the walkways it follows and under the dots it connects, in the same two passes the walkway
+   layer uses: a wide halo in the plate's own colour, then the line. Without the halo the route disappears
+   into a walkway it runs alongside for 40 m, which is the most common way a drawn route becomes unreadable. */
+
+.layer-route {
+  pointer-events: none; /* the route is an answer, not a control: clicks belong to the map camera */
+}
+
+.route-halo,
+.route-line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.route-halo {
+  stroke: var(--map-bg);
+  stroke-width: 8px;
+}
+
+.route-line {
+  stroke: var(--route);
+  stroke-width: 4px;
+}
+
+/* Sizes inside a pin are CSS pixels: the group is `scale(unitsPerPx)`'d, so the r values in the layer are
+   already in the same space as a badge's. */
+.route-pin-shape {
+  stroke-width: 1.4px;
+}
+
+.route-pin--start .route-pin-shape {
+  fill: var(--route-start);
+  stroke: var(--map-bg);
+}
+
+.route-pin--start .route-pin-eye {
+  fill: var(--map-bg);
+}
+
+.route-pin--end .route-pin-shape {
+  fill: var(--map-bg);
+  stroke: var(--route-end);
+  stroke-width: 3px;
+}
+
+.route-pin--end .route-pin-eye {
+  fill: var(--route-end);
+}

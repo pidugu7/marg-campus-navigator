@@ -83,6 +83,22 @@ Both are warnings rather than silence for exactly that reason: they say *"check 
 and not a missing path"*, which a human should answer once per campus, not a rule that rejects the
 file.
 
+## Junction labels are bookkeeping, not prose
+
+Every node row needs a `label`, and for a `kind: "junction"` the label in this file is a lowercase shorthand
+(`acad c`, `quad s`, `east n`) written for whoever is reading the JSON or a tooltip, not for a walker. Two
+things refuse to print one, and they refuse for the same reason:
+
+- the **marker layer** hands `planMarkers` only vertices whose `kind !== 'junction'`, so a junction never gets a
+  label on the plate;
+- **`routeLegs`** returns `landmark: ''` for a junction corner (see `ALGORITHMS.md` §11), so a junction never
+  gets one in a direction sentence either.
+
+A real digitised file can do as it likes — if its junctions are named things a person would recognise ("the
+banyan corner"), rename them in the data and the map and the prose will both start showing them, with no code
+change. What neither will do is invent a name from an id: `buildGraph`'s label fallback is the id, and the id is
+exactly the string no one can find on a map.
+
 ## Replacing the placeholder with the real campus
 
 The swap is one file and no code changes, which is the whole reason the schema exists:

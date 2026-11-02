@@ -27,6 +27,17 @@ const attributes: EdgeAttributes = DEFAULT_EDGE_ATTRIBUTES
  * A path along the x axis with one corner at `bend`, whose offset from the axis sets the turn: 0 is
  * straight on, and any non-zero offset large enough is a right-angle corner.
  */
+/** {@link row}'s shape with a corner a reader could actually find: same coordinates, `kind: 'place'`. */
+function namedRow(): GraphIndex {
+  const builder = new AdjacencyGraph()
+  builder.addNode({ id: 'a', x: 0, y: 0, label: 'Gate', kind: 'gate' })
+  builder.addNode({ id: 'b', x: 30, y: 30, label: 'Crossroads', kind: 'place' })
+  builder.addNode({ id: 'c', x: 60, y: 30, label: 'Library', kind: 'place' })
+  builder.addEdge({ id: 'ab', from: 'a', to: 'b', metres: 30, attributes })
+  builder.addEdge({ id: 'bc', from: 'b', to: 'c', metres: 30, attributes })
+  return builder.seal()
+}
+
 function row(bend: number, extraBend = 0): GraphIndex {
   const builder = new AdjacencyGraph()
   builder.addNode({ id: 'a', x: 0, y: 0, label: 'Gate', kind: 'gate' })
@@ -70,19 +81,54 @@ describe('routeLegs', () => {
     expect(first.reachesDestination).toBe(false)
     // The opening leg names the far end, which here is the corner itself; the turning leg names the corner
     // it turns at, which is the same vertex. Legs overlap by exactly one vertex — that overlap is the whole
-    // replay convention `stepsReplay` undoes.
-    expect(first.landmark).toBe('Crossroads')
+    // replay convention `stepsReplay` undoes. And *both* names are empty, because `b` is a junction: the file
+    // gives junctions shorthand labels for the data's own bookkeeping, the marker layer refuses to draw them,
+    // and the prose refuses to print them too. `namedRow()` below is the same shape with a nameable corner.
+    expect(first.landmark).toBe('')
     expect(second.nodeIds).toEqual(['b', 'c'])
     expect(second.compass).toBe('east')
     expect(second.direction).toBe('slight-left')
-    expect(second.landmark).toBe('Crossroads')
+    expect(second.landmark).toBe('')
     expect(second.reachesDestination).toBe(true)
+  })
+
+  it('names the corner when the map would name it', () => {
+    // The one-line difference from `row(30)`: the corner is a `place`. Every expectation above flips — same
+    // geometry, same legs, same metres — which is what makes this the test for the naming rule rather than a
+    // second copy of the geometry one.
+    const index = namedRow()
+    const legs = routeLegs(index, ['a', 'b', 'c'], ['ab', 'bc'])
+    expect(legs.map((leg) => leg.metres)).toEqual([30, 30])
+    expect(legs.map((leg) => leg.landmark)).toEqual(['Crossroads', 'Crossroads'])
+    expect(stepsFromLegs(legs).map((step) => step.instruction)).toEqual([
+      'Head south-east to Crossroads',
+      'Bear left at Crossroads, your destination',
+    ])
+  })
+
+  it('decides a landmark by kind, and only `junction` is refused', () => {
+    const builder = new AdjacencyGraph()
+    const kinds = ['junction', 'place', 'gate', 'entrance'] as const
+    kinds.forEach((kind, i) => {
+      builder.addNode({ id: `v${String(i)}`, x: i * 40, y: (i % 2) * 30, label: `Named ${kind}`, kind })
+      if (i > 0) builder.addEdge({ id: `e${String(i)}`, from: `v${String(i - 1)}`, to: `v${String(i)}`, metres: 40, attributes })
+    })
+    const index = builder.seal()
+    const legs = routeLegs(index, ['v0', 'v1', 'v2', 'v3'], ['e1', 'e2', 'e3'])
+    // The opening leg looks *forward*, to `v1`; the two turning legs look back at the corner they turn at,
+    // `v1` again and then `v2`. So the first two landmarks are the same vertex under the same rule.
+    expect(legs.map((leg) => leg.landmark)).toEqual(['Named place', 'Named place', 'Named gate'])
+    // And the junction that starts the path is never asked for its name: a leg's `direction` is a turn, and
+    // the origin has no turn to name it after.
+    expect(legs[0]?.direction).toBe('straight')
   })
 
   it('drops the clause when the corner has no name to read, rather than printing its id', () => {
     const builder = new AdjacencyGraph()
     builder.addNode({ id: 'a', x: 0, y: 0, label: 'Gate', kind: 'gate' })
-    builder.addNode({ id: 'b', x: 30, y: 30 })
+    // `kind: 'place'` on a corner with no label, so this test is about the *missing name* and not about the
+    // junction rule above: a junction with no label would pass for the wrong reason.
+    builder.addNode({ id: 'b', x: 30, y: 30, kind: 'place' })
     builder.addNode({ id: 'c', x: 60, y: 30, label: 'Library', kind: 'place' })
     builder.addEdge({ id: 'ab', from: 'a', to: 'b', metres: 42, attributes })
     builder.addEdge({ id: 'bc', from: 'b', to: 'c', metres: 30, attributes })
@@ -210,10 +256,10 @@ describe('stepsFromLegs', () => {
   it('opens with a compass heading and closes with the destination clause', () => {
     const index = row(30)
     const steps = stepsFromLegs(routeLegs(index, ['a', 'b', 'c'], ['ab', 'bc']))
-    expect(steps.map((step) => step.instruction)).toEqual([
-      'Head south-east to Crossroads',
-      'Bear left at Crossroads, your destination',
-    ])
+    // No clause at all, because the only corner here is a junction. The heading and the destination suffix are
+    // what survive, and they are the parts that were ever true: "Head south-east" and "your destination" both
+    // describe the walk, "at Crossroads" would have described a database row.
+    expect(steps.map((step) => step.instruction)).toEqual(['Head south-east', 'Bear left, your destination'])
     expect(steps.map((step) => step.metres)).toEqual([30, 30])
   })
 

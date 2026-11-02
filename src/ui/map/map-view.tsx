@@ -1,15 +1,18 @@
 /**
- * The campus: one SVG, one camera, five layers.
+ * The campus: one SVG, one camera, six layers.
  *
  * The whole design rests on a single decision — **panning and zooming never touch the geometry.** The camera
  * lives in the `<svg>`'s `viewBox`, so dragging the campus mutates one attribute and the four data layers
  * (`memo`'d over a dataset that does not change) re-render zero times per frame. The one exception is the
  * marker layer, which must re-derive sizes because a badge is 26 *pixels*; that is the deliberate cost of a
- * readable map, and it is paid for ~20 places rather than for 56 walkways.
+ * readable map, and it is paid for ~20 places rather than for 56 walkways. The route layer joins that exception:
+ * its pins are pixels too, so it re-derives on a camera frame — for a path of nine vertices, which is what a
+ * route is, and not for the walkways underneath it.
  *
- * Layer order is the map's argument: ground, buildings, walkways, dots, markers. Anything drawn later can
- * be reached earlier, and a route overlay (Phase 3) slots in between walkways and dots — above the paths it
- * follows, below the places a person aims for.
+ * Layer order is the map's argument: ground, buildings, walkways, route, dots, markers. Anything drawn later
+ * can be reached earlier, and the route sits between walkways and dots for both reasons at once — it must be
+ * *above* the paths it follows, or it is invisible at every crossing, and *below* the places a person aims
+ * for, because a pin you cannot see is a destination you cannot confirm.
  *
  * This file is also where the two coordinate systems meet. `viewBox` and the plan speak screen pixels; the
  * SVG speaks world units. `unitsPerPx` and `toScreen` are the only two conversions, and keeping them here
@@ -19,6 +22,7 @@ import { useMemo, useRef } from 'react'
 import { Maximize, Minus, Plus } from 'lucide-react'
 import { DEFAULT_EDGE_ATTRIBUTES } from '@/data'
 import type { BuildingSpec, CampusModel, CanvasSpec, NodeSpec, SurfaceSpec, ZoneSpec } from '@/data'
+import { RouteLayer } from './layers/route-layer'
 import { BaseLayer } from './layers/base-layer'
 import { BuildingLayer } from './layers/building-layer'
 import { MarkerLayer, type MarkerEntry } from './layers/marker-layer'
@@ -44,11 +48,26 @@ export interface MapViewProps {
   readonly zones: readonly ZoneSpec[]
   /** Background grid spacing, in world units. Comes from the canvas' scale, not from this component. */
   readonly gridStep: number
+  /**
+   * The route to draw over the walkways, or `null` for none. Shaped like this rather than like a `RouteResult`
+   * because the map needs four numbers and a list of ids, and is not allowed to know that a search exists: the
+   * caller (`App`) unpacks the hook's result here, which is the one place the two halves are allowed to meet.
+   */
+  readonly route?: MapViewRoute | null
+}
+
+/** What the route layer needs, in the map's own vocabulary. */
+export interface MapViewRoute {
+  readonly nodeIds: readonly string[]
+  readonly algorithmLabel: string
+  readonly startLabel: string
+  readonly destinationLabel: string
+  readonly metres: number
 }
 
 const UNZONED = 'var(--walk-case)'
 
-export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep }: MapViewProps) {
+export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep, route }: MapViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const extent = useMemo(() => extentOf(canvas), [canvas])
   const viewport = useViewport(extent.width, extent.height, svgRef)
@@ -162,7 +181,9 @@ export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, 
         className={viewport.dragging ? 'map map--dragging' : 'map'}
         viewBox={viewport.viewBox}
         role="application"
-        aria-label={`Campus map: ${model.summary.placeCount} places over ${model.summary.edgeCount} walkway segments. Drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom, 0 to reset. Each place can be tabbed to for its details.`}
+        aria-label={`Campus map: ${model.summary.placeCount} places over ${model.summary.edgeCount} walkway segments. Drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom, 0 to reset. Each place can be tabbed to for its details.${
+          route ? ` A route from ${route.startLabel} to ${route.destinationLabel} is drawn on top of the walkways.` : ''
+        }`}
         tabIndex={0}
         {...viewport.bindings}
         onPointerDown={(event) => {
@@ -198,6 +219,17 @@ export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, 
           toScreen={toScreen}
           tooltip={tooltip}
         />
+        {route ? (
+          <RouteLayer
+            nodeIds={route.nodeIds}
+            positions={positions}
+            unitsPerPx={unitsPerPx}
+            algorithmLabel={route.algorithmLabel}
+            startLabel={route.startLabel}
+            destinationLabel={route.destinationLabel}
+            metres={route.metres}
+          />
+        ) : null}
         <NodeLayer nodes={model.nodes} colourFor={colourFor} detailed={viewport.scale > 1.9} />
         <MarkerLayer
           entries={entries}

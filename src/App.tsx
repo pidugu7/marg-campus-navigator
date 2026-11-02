@@ -1,6 +1,11 @@
+import { useMemo, useState } from 'react'
 import { AlertTriangle, Boxes, CheckCircle2, Compass, Database, Route as RouteIcon } from 'lucide-react'
 import { useCampus } from '@/hooks/useCampus'
 import { useEngineContract } from '@/hooks/useEngineContract'
+import { useRoute } from '@/hooks/useRoute'
+import { RouteControls } from '@/ui/route/route-controls'
+import { algorithmChoice, placeOptions, swapEndpoints } from '@/ui/route/route-options'
+import type { RouteAlgorithmChoice } from '@/hooks/useRoute'
 import { MapView } from '@/ui/map/map-view'
 import '@/styles/app.css'
 import '@/styles/map.css'
@@ -9,15 +14,42 @@ import '@/styles/map.css'
  * The shell. Phases 0 and 1 proved the boundaries; Phase 2 puts a campus on the plate.
  *
  * Note what this file does *not* do: it never imports `@/engine`. Everything it draws and counts arrives
- * through `useCampus`, which is the one module allowed to call `buildGraph`. That is the rule the
- * architecture test enforces, and the reason a component can be rewritten — or the map replaced by a
- * canvas renderer — without touching a single algorithm.
+ * through `useCampus` (the one module allowed to call `buildGraph`) and `useRoute` (the one allowed to call a
+ * search). That is the rule the architecture test enforces, and the reason a component can be rewritten — or the
+ * map replaced by a canvas renderer, or a search swapped for a cached router — without touching an algorithm.
  */
 export default function App() {
   const campusInfo = useCampus()
   const engine = useEngineContract()
   const { canvas, gridStep, model } = campusInfo
   const issues = model.issues
+
+  // The route state lives here, in the shell, and nowhere else: the map needs the line and the panel needs the
+  // numbers, and a control that owns its own copy of `from` is how a UI ends up drawing a route for a pair of
+  // places it is not showing. Both pickers are empty at first — the map shows the campus, and asking for a
+  // route is a decision rather than a default.
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [algorithm, setAlgorithm] = useState<RouteAlgorithmChoice>('a-star')
+  const { result } = useRoute(model.graph, from, to, algorithm)
+  const places = useMemo(() => placeOptions(model.nodes, model.edges), [model])
+  const labelOf = useMemo(() => new Map(model.nodes.map((node) => [node.id, node.label])), [model])
+
+  // The map takes four strings and an id list; it never sees a `RouteResult`. Unwrapping the union is this
+  // file's job, and it is the only place the two halves of the app are allowed to meet.
+  const route =
+    result !== null && result.ok
+      ? {
+          nodeIds: result.nodeIds,
+          metres: result.metres,
+          // The name of what was *asked*, not of what came back: the result echoes its own algorithm, and the
+          // shared contract says that echo is the request, so reading the picker is both simpler and one less
+          // union to narrow.
+          algorithmLabel: algorithmChoice(algorithm).label,
+          startLabel: labelOf.get(from) ?? from,
+          destinationLabel: labelOf.get(to) ?? to,
+        }
+      : null
 
   return (
     <div className="shell">
@@ -62,9 +94,34 @@ export default function App() {
           surfaces={campusInfo.surfaces}
           zones={campusInfo.zones}
           gridStep={gridStep}
+          route={route}
         />
 
         <aside className="side">
+          <section className="card">
+            <h2>
+              <RouteIcon size={13} aria-hidden="true" />
+              Route
+            </h2>
+            <RouteControls
+              options={places}
+              from={from}
+              to={to}
+              algorithm={algorithm}
+              onFrom={setFrom}
+              onTo={setTo}
+              onAlgorithm={setAlgorithm}
+              onSwap={() => {
+                // One pair of updates, both from the previous values: two `setState` calls that read the state
+                // above them would swap `a → b` into `b → b`, because React hands each callback the value from
+                // the same render.
+                const [nextFrom, nextTo] = swapEndpoints(from, to)
+                setFrom(nextFrom)
+                setTo(nextTo)
+              }}
+            />
+          </section>
+
           <section className="card">
             <h2>
               <RouteIcon size={13} aria-hidden="true" />

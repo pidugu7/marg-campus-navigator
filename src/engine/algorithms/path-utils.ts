@@ -35,7 +35,8 @@ export interface RouteLeg {
    */
   readonly compass: CompassPoint | null
   /**
-   * What the step is named after: the far end for the opening leg, the corner for any other leg. Decided in
+   * What the step is named after: the far end for the opening leg, the corner for any other leg — and empty
+   * when that vertex is a junction, which is the map's own rule about who gets a name. Decided in
    * the geometry half because it depends on where the leg starts, and the wording half must not have to
    * re-derive geometry to pick a noun. Empty when that vertex has no label to read, which is what makes the
    * sentence stop after the verb instead of printing "at ".
@@ -55,6 +56,22 @@ export interface RouteLeg {
  */
 function placeAll(index: GraphIndex, ids: readonly NodeId[]): (GraphNode | undefined)[] {
   return ids.map((id) => index.node(id))
+}
+
+/**
+ * The label a sentence is allowed to use for a vertex, or `''` when it is not.
+ *
+ * A junction carries a shorthand label in the file — `"acad c"` — for whoever is reading the *data*, and the
+ * marker layer deliberately never draws one: it receives only vertices whose `kind !== 'junction'`. The prose
+ * follows the map, because a reader who is told "turn left at acad c" goes looking for a place called that and
+ * finds a bend in a path. Not a rule about kinds being unimportant — a `gate` and an `entrance` are both named,
+ * and nameable corners are the whole value of a directions list — and not a fallback for a missing label either:
+ * `buildGraph` gives every vertex a label, falling back to its id, which is exactly the string no walker can
+ * use. `landmark` is the one field of a leg that is a *judgement* rather than a measurement, so the judgement
+ * is written down here in one place with its reason.
+ */
+function landmarkOf(node: GraphNode | undefined): string {
+  return node === undefined || node.kind === 'junction' ? '' : node.label
 }
 
 /** The turn at each interior vertex, in degrees, and `0` at the two ends where there is nothing to turn. */
@@ -114,7 +131,7 @@ export function routeLegs(index: GraphIndex, nodeIds: readonly NodeId[], edgeIds
       metres: Math.round(metres * 10) / 10,
       direction: position === 0 ? 'straight' : turnDirectionFor(turns[start] as number),
       compass: head !== undefined && far !== undefined ? compassOf(head, far) : null,
-      landmark: corner?.label ?? '',
+      landmark: landmarkOf(corner),
       reachesDestination,
     })
   }

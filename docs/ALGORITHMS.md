@@ -625,8 +625,16 @@ the previous leg with the survivor's record winning outright, the boundary from 
 the destination clause surviving a folded final stub, the forward fold of a short opener, an all-stub route
 collapsing to one sentence, the 0.5 m floor surviving `minLegMetres: 0`, a configurable threshold, and the
 serpentine that runs through the real `routeLegs` so the composition is tested and not three units agreeing.
-`dijkstra.spec.ts` asserts the same replay property on routes, not on hand-built vertex lists. **27 tests**, and
-`path-utils.ts` is still at 100 % statements and branches with the new pass inside it.
+`dijkstra.spec.ts` asserts the same replay property on routes, not on hand-built vertex lists. Then 9 tests for
+`simplifyLegs` (above). **29 tests**, and `path-utils.ts` is still at 100 % statements and branches with the
+fold and the naming rule inside it — the latter worth noting, because a rule with one `||` in it is covered by
+two fixtures and nothing else was needed to say it.
+
+**Where the wording stops and the UI starts.** Nothing in this file knows about a screen, and the two
+directions the map takes from here — `src/ui/map/route-plan.ts` (which vertices can be plotted) and
+`src/ui/route/route-options.ts` (which places may be picked, and what each algorithm's name means) — are pure
+modules for the same reason, so the whole of Phase 3's teaching value is testable in Node. What a leg's
+`compass` and `landmark` are *for* is the route card's business, and that is cp5.
 
 ---
 
@@ -712,14 +720,14 @@ table is a measurement of speed.*
 
 | what | measured |
 | --- | --- |
-| `npm run check` | typecheck · lint · **437 tests in 23 files** · build ok |
-| `src/engine` | **260 tests** — structures 77, `algorithms/` 140 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 27), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
+| `npm run check` | typecheck · lint · **461 tests in 25 files** · build ok |
+| `src/engine` | **262 tests** — structures 77, `algorithms/` 142 (search-common 26, a-star 25, dfs 26, dijkstra 19, bfs 17, path-utils 29), geo 21, `__tests__/` 22 (contract 6, search-parity 16) |
 | `src/data` | 86 (`build-graph.spec.ts`) |
 | `src/ui/map` | 64 (view 25, marker-plan 15, tip-content 16, icons 8) |
-| `src/test` | 27 — architecture guard 14, `map:validate` 6, campus routing 5, schema drift 2 |
+| `src/test` | 28 — architecture guard 14, `map:validate` 6, campus routing 6, schema drift 2 |
 | coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
 | sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 4 profiles (metres, unit, jittered, `× 0.2`), zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
-| the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
+| the directions pass, on 380 pairs | `routeLegs` → 1 404 legs, `simplifyLegs` → the same 1 404 (0 pairs changed: the shortest walkway is 80 m, four times the 20 m threshold); `landmarkOf` → 185 legs name something, 1 219 name a junction and therefore say nothing; **3.69** sentences per route by A\* or BFS, **6.91** by depth-first, **10** on the longest |
 | the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
 | `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
 | bundle | `dist/assets/index-*.js` 286.69 kB (gzip 90.32 kB) — unchanged from cp1, because no UI module imports the searches yet; Phase 3 cp4 is where they reach a screen |
