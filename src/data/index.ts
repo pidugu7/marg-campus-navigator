@@ -43,7 +43,14 @@ export const DATA_STATUSES: readonly DataStatus[] = ['synthetic-placeholder', 'd
    is that a component's *every* cross-layer import names a barrel the architecture test has agreed to.
    The engine's barrel is where these types live (`export type * from './types'`), so this adds no new
    surface — it only keeps the direction of dependency one-way: ui -> data -> engine. */
-export type { EdgeAttributes, GraphEdge, GraphNode, NodeId, NodeKind, ZoneId } from '@/engine'
+export type { EdgeAttributes, GraphEdge, GraphNode, NodeId, NodeKind, SurfaceKind, ZoneId } from '@/engine'
+
+/**
+ * The attributes `sanitiseAttributes` fills in, so a *reader* of the map can tell a notable segment from an
+ * ordinary one. The UI is not allowed to import `@/engine` — and it should not have to restate what "a
+ * normal walkway" means, which is the data layer's business, not the view's.
+ */
+export { DEFAULT_EDGE_ATTRIBUTES } from '@/engine'
 
 /* The data layer's own contract, re-exported so a component can type a report without reaching
    past the barrel — `src/ui/**` is not allowed to import `./build-graph` directly any more than it

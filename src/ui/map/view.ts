@@ -172,6 +172,61 @@ export function distanceBetween(a: Px, b: Px): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
 }
 
+/**
+ * How many world units one CSS pixel covers right now.
+ *
+ * This is the whole reason badges and labels are legible: SVG text and icons live in the map's own
+ * coordinate system, so a 16-unit icon is 16 metres of campus at every zoom — huge when you zoom in, a
+ * speck when you zoom out. Anything that must be a *screen* size (a 32 px tap target, an 11 px label) is
+ * sized as `px * worldPerPixel(span, plateWidth)`, and a layer that does that has to re-render when the
+ * camera moves. That is the price of a readable map, and it is paid by ~20 markers, not by 56 walkways.
+ *
+ * A plate that has not been laid out yet reports width 0 — during SSR, and for one frame — so the ratio
+ * falls back to a nominal 1000 px plate instead of `Infinity`, which would render an infinitely large badge.
+ */
+export function worldPerPixel(span: number, plateWidth: number): number {
+  if (!(plateWidth > 0) || !Number.isFinite(plateWidth)) return span / 1000
+  return span / plateWidth
+}
+
+/**
+ * Which side of the point a tooltip sits on: above, unless there is not room, in which case below.
+ * A tooltip that is clipped at the top of the plate is worse than one covering the marker it describes.
+ */
+export function tipSide(pointY: number, plateHeight: number, room: number): 'above' | 'below' {
+  // Below only when there is no room above *and* there is below; every other case — including the phone
+  // plate where neither side fits — keeps the tip above, covering the marker rather than the plate's edge.
+  if (pointY + room > plateHeight) return 'above'
+  return pointY - room >= 0 ? 'above' : 'below'
+}
+
+/**
+ * Where the middle of an overlay of width `boxWidth` may sit, so it stays inside the plate: the tooltip's
+ * own clamping, done in arithmetic instead of by a CSS function that cannot know the box.
+ *
+ * A plate narrower than the box centres the overlay instead of pinning it — the same rule as the camera's,
+ * for the same reason: a 360 px plate with a 220 px tip has no valid side to hold it against.
+ */
+export function tipLeft(x: number, plateWidth: number, boxWidth: number): number {
+  const half = Math.min(boxWidth / 2, plateWidth / 2)
+  return clamp(x, half, Math.max(half, plateWidth - half))
+}
+
+/** World point → CSS pixels inside the plate, for the HTML overlays that must line up with the geometry. */
+export function worldToScreen(
+  view: View,
+  plate: { readonly width: number; readonly height: number },
+  aspect: number,
+  x: number,
+  y: number,
+): { readonly x: number; readonly y: number } {
+  const { rect } = viewBoxOf(view, aspect)
+  return {
+    x: ((x - rect.x) / rect.w) * plate.width,
+    y: ((y - rect.y) / rect.h) * plate.height,
+  }
+}
+
 /** Extent of the canvas, guarded: a malformed file must not produce a NaN viewBox. */
 export function extentOf(canvas: CanvasSpec): Extent {
   const width = Number.isFinite(canvas.width) && canvas.width > 0 ? canvas.width : 1000

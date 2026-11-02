@@ -5,6 +5,9 @@
  * the distinction is the data model ("a place is a node that carries a category"), so it should be visible
  * even where the labels are suppressed. Icon badges land in checkpoint 4 on top of these dots.
  *
+ * Interaction belongs to `marker-layer.tsx`, which draws a 32 px target over each place; the dots here are
+ * `pointer-events: none` so a hover never has to fight a badge for the same pixel.
+ *
  * The dots are drawn from `model.nodes` — the *engine's* nodes — rather than from the file's rows, so a
  * row the validator dropped is absent from the map too. Drawing what the router cannot reach would be the
  * most convincing kind of lie this app could tell.
@@ -30,9 +33,7 @@ function NodeLayerBase({ nodes, colourFor, detailed }: NodeLayerProps) {
           cy={node.y}
           r={detailed ? radiusFor(node.kind) + 1 : radiusFor(node.kind)}
           style={node.kind === 'junction' ? undefined : { fill: colourFor(node.zone) }}
-        >
-          <title>{node.label}</title>
-        </circle>
+        />
       ))}
     </g>
   )

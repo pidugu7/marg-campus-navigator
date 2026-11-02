@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MIN_SPAN_RATIO,
   distanceBetween,
+  tipSide,
   clampView,
   extentOf,
   fitView,
@@ -19,9 +20,12 @@ import {
   safeAspect,
   screenDelta,
   screenToWorld,
+  tipLeft,
   spanLimits,
   viewBoxOf,
   wheelFactor,
+  worldPerPixel,
+  worldToScreen,
   zoomView,
   type View,
 } from './view'
@@ -206,6 +210,41 @@ describe('gesture input, converted once instead of in two handlers', () => {
 
   it('measures two client points', () => {
     expect(distanceBetween({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5)
+  })
+})
+
+describe('screen-space sizes', () => {
+  it('converts a span to world units per pixel, and falls back before the first layout', () => {
+    expect(worldPerPixel(1600, 800)).toBe(2)
+    expect(worldPerPixel(1600, 0)).toBeCloseTo(1.6, 6) // a nominal 1000 px plate, not Infinity
+    expect(worldPerPixel(1600, Number.NaN)).toBeCloseTo(1.6, 6)
+    expect(worldPerPixel(1600, -300)).toBeCloseTo(1.6, 6)
+  })
+
+  it('picks the side that has room, and the least bad side when neither does', () => {
+    expect(tipSide(500, 900, 80)).toBe('above')
+    expect(tipSide(40, 900, 80)).toBe('below')
+    expect(tipSide(860, 900, 80)).toBe('above')
+    // A phone plate 288 tall and a 90 px tip: below would spill, so it covers the marker instead.
+    expect(tipSide(270, 288, 90)).toBe('above')
+  })
+
+  it('keeps a tip box inside the plate, and centres it when the plate is too narrow', () => {
+    expect(tipLeft(700, 1440, 224)).toBe(700)
+    expect(tipLeft(40, 1440, 224)).toBe(112) // half the box, so nothing hangs off the left edge
+    expect(tipLeft(1430, 1440, 224)).toBe(1328)
+    // A 224 px box on a 180 px plate has no valid side: centre it rather than pin it to a wall.
+    expect(tipLeft(10, 180, 224)).toBe(90)
+    expect(tipLeft(170, 180, 224)).toBe(90)
+  })
+
+  it('projects a world point onto the plate, which is the inverse of screenToWorld', () => {
+    const view = { cx: 800, cy: 500, span: 1600 }
+    const plate = { width: 1000, height: 625 }
+    const screen = worldToScreen(view, plate, 16 / 10, 1_200, 300)
+    const back = screenToWorld({ x: 0, y: 0, width: 1_000, height: 625 }, view, screen.x, screen.y)
+    expect(back.x).toBeCloseTo(1_200, 6)
+    expect(back.y).toBeCloseTo(300, 6)
   })
 })
 

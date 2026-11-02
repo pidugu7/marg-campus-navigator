@@ -52,6 +52,12 @@ export interface Viewport {
   readonly dragging: boolean
   /** 1 at fit, > 1 when zoomed in. Drives label staging and the HUD readout. */
   readonly scale: number
+  /** The plate's measured box in CSS pixels, and the world rectangle the camera is looking at. Together
+   *  these are everything a screen-space layer needs: sizes in px, positions by projection. `width: 0`
+   *  means "not laid out yet", which is why the marker plan returns nothing in that case. */
+  readonly plate: { readonly width: number; readonly height: number }
+  readonly box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+  readonly aspect: number
   readonly fitted: boolean
   readonly zoomBy: (factor: number) => void
   readonly reset: () => void
@@ -82,7 +88,9 @@ export function useViewport(
   svgRef: RefObject<SVGSVGElement | null>,
 ): Viewport {
   const extent: Extent = useMemo(() => ({ width, height }), [width, height])
-  const [aspect, setAspect] = useState(16 / 10)
+  // Zero until measured, on purpose: a marker sized for a guessed plate would be the wrong size for one
+  // frame, and "wrong for a frame" is what people report as a flicker.
+  const [plate, setPlate] = useState({ width: 0, height: 0 })
   const [view, setView] = useState<View>(() => fitView({ width, height }, 16 / 10))
   const [dragging, setDragging] = useState(false)
 
@@ -90,6 +98,7 @@ export function useViewport(
   // closing over values that go stale the first time the window is resized. The camera *itself* is not in
   // here: every gesture updates through `setView(current => …)`, which is React's own way of saying "the
   // latest value, please", and is why a fast drag never lags a frame behind the cursor.
+  const aspect = safeAspect(plate.width, plate.height)
   const geometry = useRef({ aspect, extent })
   useEffect(() => {
     geometry.current = { aspect, extent }
@@ -252,7 +261,7 @@ export function useViewport(
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      setAspect(safeAspect(entry.contentRect.width, entry.contentRect.height))
+      setPlate({ width: entry.contentRect.width, height: entry.contentRect.height })
     })
     observer.observe(svg)
     return () => observer.disconnect()
@@ -263,12 +272,15 @@ export function useViewport(
   // re-clamping in a derived value fixes that in the same render, with no effect, no extra state, and no
   // chance of the map visibly sticking to an edge after a resize.
   const camera = useMemo(() => clampView(view, extent, aspect), [view, extent, aspect])
-  const { attr } = useMemo(() => viewBoxOf(camera, aspect), [camera, aspect])
+  const viewBox = useMemo(() => viewBoxOf(camera, aspect), [camera, aspect])
   const fitted = isFit(camera, extent, aspect)
 
   return {
     view: camera,
-    viewBox: attr,
+    viewBox: viewBox.attr,
+    plate,
+    box: viewBox.rect,
+    aspect,
     dragging,
     scale: fitView(extent, aspect).span / camera.span,
     fitted,

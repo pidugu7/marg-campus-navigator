@@ -68,11 +68,15 @@ export default defineConfig(({ mode }) => {
         include: [
           'src/engine/**',
           'src/data/**',
-          // The map's camera is arithmetic with 21 specs and no React in it, so it belongs in the same
-          // report as the rest of the decision logic. The *components* stay out: there is no DOM here to
-          // measure them with, and a coverage figure that quietly omits the untestable half is the number
-          // that lies.
+          // The map's pure modules — camera, decluttering, tip wording, icon table — are arithmetic with
+          // specs and no React in them, so they belong in the same report as the rest of the decision logic.
+          // The hooks and `.tsx` layers stay out *by name*: there is no DOM in this project yet to measure
+          // them with, and a figure that quietly omits the untestable half is the number that lies. Phase 5
+          // adds jsdom and they join this list.
           'src/ui/map/view.ts',
+          'src/ui/map/marker-plan.ts',
+          'src/ui/map/tip-content.ts',
+          'src/ui/map/icons.ts',
         ],
         exclude: [
           'src/engine/**/*.test.ts',

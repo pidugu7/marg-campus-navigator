@@ -11,14 +11,22 @@
  */
 import { memo } from 'react'
 import type { GraphEdge } from '@/data'
+import { edgeTip } from '../tip-content'
+import { tipHandlers, type TipAnchor, type Tooltip } from '../use-tooltip'
 import type { Px } from '../view'
 
 export interface WalkwayLayerProps {
   readonly edges: readonly GraphEdge[]
   readonly positions: ReadonlyMap<string, Px>
+  /** Node id → the label to show. The layer must not look inside the node list for one string. */
+  readonly labels: ReadonlyMap<string, string>
+  readonly toScreen: (x: number, y: number) => TipAnchor
+  readonly tooltip: Tooltip
 }
 
-function WalkwayLayerBase({ edges, positions }: WalkwayLayerProps) {
+/** A segment is described at its midpoint: that is where a finger or a cursor is most likely to be, and
+ *  unlike the ends it is inside the thing being named. */
+function WalkwayLayerBase({ edges, positions, labels, toScreen, tooltip }: WalkwayLayerProps) {
   const drawable = edges.flatMap((edge) => {
     const from = positions.get(edge.from)
     const to = positions.get(edge.to)
@@ -43,18 +51,30 @@ function WalkwayLayerBase({ edges, positions }: WalkwayLayerProps) {
         ))}
       </g>
       <g className="walk-fills">
-        {drawable.map(({ edge, from, to }) => (
-          <line
-            key={edge.id}
-            className={`walk-fill ${styleFor(edge)}`}
-            x1={from.x}
-            y1={from.y}
-            x2={to.x}
-            y2={to.y}
-          >
-            <title>{labelFor(edge)}</title>
-          </line>
-        ))}
+        {drawable.map(({ edge, from, to }) => {
+          const middle = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+          const content = () =>
+            edgeTip(edge, {
+              from: labels.get(edge.from) ?? edge.from,
+              to: labels.get(edge.to) ?? edge.to,
+            })
+          const handlers = tipHandlers({
+            id: edge.id,
+            screen: () => toScreen(middle.x, middle.y),
+            content,
+            show: tooltip.show,
+            hide: tooltip.hide,
+          })
+          return (
+            <g key={edge.id} className={tooltip.tip?.id === edge.id ? 'walk marker--active' : 'walk'} {...handlers}>
+              <line className={`walk-fill ${styleFor(edge)}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+              {/* The casing is the hit area — 6 px of visible stroke, no invisible twin per segment. On a
+                  phone a walkway is not a tap target you aim at, which is why the places get 32 px and the
+                  segments do not: this describes, it does not navigate. */}
+              <line className="walk-hit" x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+            </g>
+          )
+        })}
       </g>
     </g>
   )
@@ -68,20 +88,6 @@ function styleFor(edge: GraphEdge): string {
   if (edge.attributes.shaded) classes.push('walk--shaded')
   if (edge.oneWay) classes.push('walk--oneway')
   return classes.join(' ')
-}
-
-/** The browser's own tooltip, for now: cheap, keyboard-reachable and it needs no tooltip layer. Phase 2's
- *  checkpoint 4 replaces it with the app's styled tooltip; the text is what both will show. */
-function labelFor(edge: GraphEdge): string {
-  const attrs = edge.attributes
-  const notes = [`${Math.round(edge.metres * 10) / 10} m`]
-  if (attrs.stairs) notes.push('stairs')
-  if (attrs.stepFree) notes.push('step-free')
-  if (attrs.shaded) notes.push('shaded')
-  if (attrs.lit) notes.push('lit')
-  if (attrs.surface !== 'paved') notes.push(attrs.surface)
-  if (attrs.slope !== 0) notes.push(`${Math.round(attrs.slope * 100)}% grade`)
-  return `${edge.from} → ${edge.to}: ${notes.join(', ')}`
 }
 
 export const WalkwayLayer = memo(WalkwayLayerBase)

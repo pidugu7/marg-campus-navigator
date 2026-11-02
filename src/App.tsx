@@ -57,6 +57,7 @@ export default function App() {
         <MapView
           model={model}
           canvas={canvas}
+          placeRows={campusInfo.nodes}
           buildings={campusInfo.buildings}
           surfaces={campusInfo.surfaces}
           zones={campusInfo.zones}

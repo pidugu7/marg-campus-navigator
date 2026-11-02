@@ -1,30 +1,44 @@
 /**
- * The campus: one SVG, one camera, four layers.
+ * The campus: one SVG, one camera, five layers.
  *
  * The whole design rests on a single decision — **panning and zooming never touch the geometry.** The camera
- * lives in the `<svg>`'s `viewBox`, so dragging the campus mutates one attribute and React re-renders the
- * layers not at all (they are `memo`'d and their props are the dataset, which does not change). A
- * `transform` on a group would have worked too; a `viewBox` is better here because the *scale* is then
- * part of the SVG's own coordinate system, which is what `vector-effect: non-scaling-stroke` and font sizes
- * in world units both need.
+ * lives in the `<svg>`'s `viewBox`, so dragging the campus mutates one attribute and the four data layers
+ * (`memo`'d over a dataset that does not change) re-render zero times per frame. The one exception is the
+ * marker layer, which must re-derive sizes because a badge is 26 *pixels*; that is the deliberate cost of a
+ * readable map, and it is paid for ~20 places rather than for 56 walkways.
  *
- * Layer order is the map's argument: ground, buildings, walkways, nodes. Anything drawn later can be
- * clicked earlier, and a route overlay (Phase 3) slots in between walkways and nodes — above the paths it
- * follows, below the dots a person aims for.
+ * Layer order is the map's argument: ground, buildings, walkways, dots, markers. Anything drawn later can
+ * be reached earlier, and a route overlay (Phase 3) slots in between walkways and dots — above the paths it
+ * follows, below the places a person aims for.
+ *
+ * This file is also where the two coordinate systems meet. `viewBox` and the plan speak screen pixels; the
+ * SVG speaks world units. `unitsPerPx` and `toScreen` are the only two conversions, and keeping them here
+ * rather than inside each layer is what lets `marker-plan.ts` be tested without a DOM.
  */
 import { useMemo, useRef } from 'react'
 import { Maximize, Minus, Plus } from 'lucide-react'
-import type { BuildingSpec, CampusModel, CanvasSpec, SurfaceSpec, ZoneSpec } from '@/data'
+import { DEFAULT_EDGE_ATTRIBUTES } from '@/data'
+import type { BuildingSpec, CampusModel, CanvasSpec, NodeSpec, SurfaceSpec, ZoneSpec } from '@/data'
 import { BaseLayer } from './layers/base-layer'
 import { BuildingLayer } from './layers/building-layer'
+import { MarkerLayer, type MarkerEntry } from './layers/marker-layer'
 import { NodeLayer } from './layers/node-layer'
 import { WalkwayLayer } from './layers/walkway-layer'
+import { legendIcons, iconFor } from './icons'
+import { baselineWords } from './tip-content'
+import { placeTip } from './tip-content'
+import { planMarkers, markerPriority, type MarkerRequest } from './marker-plan'
+import { MapLegend } from './map-legend'
+import { MapTip } from './map-tip'
+import { useTooltip } from './use-tooltip'
 import { useViewport } from './use-viewport'
-import { extentOf } from './view'
+import { extentOf, worldPerPixel, worldToScreen } from './view'
 
 export interface MapViewProps {
   readonly model: CampusModel
   readonly canvas: CanvasSpec
+  /** The file's node rows, for the two draw-only flags: `minor` and `category`. */
+  readonly placeRows: readonly NodeSpec[]
   readonly buildings: readonly BuildingSpec[]
   readonly surfaces: readonly SurfaceSpec[]
   readonly zones: readonly ZoneSpec[]
@@ -34,37 +48,133 @@ export interface MapViewProps {
 
 const UNZONED = 'var(--walk-case)'
 
-export function MapView({ model, canvas, buildings, surfaces, zones, gridStep }: MapViewProps) {
+export function MapView({ model, canvas, placeRows, buildings, surfaces, zones, gridStep }: MapViewProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const extent = useMemo(() => extentOf(canvas), [canvas])
   const viewport = useViewport(extent.width, extent.height, svgRef)
+  const { plate, box, view, aspect } = viewport
+  const tooltip = useTooltip(plate.height)
 
-  const positions = useMemo(
-    () => new Map(model.nodes.map((node) => [node.id, { x: node.x, y: node.y }])),
-    [model],
-  )
+  const positions = useMemo(() => new Map(model.nodes.map((node) => [node.id, { x: node.x, y: node.y }])), [model])
+  const labels = useMemo(() => new Map(model.nodes.map((node) => [node.id, node.label])), [model])
+  const nodeById = useMemo(() => new Map(model.nodes.map((node) => [node.id, node])), [model])
   const zoneColours = useMemo(() => new Map(zones.map((zone) => [zone.id, zone.color])), [zones])
+  const zoneLabels = useMemo(() => new Map(zones.map((zone) => [zone.id, zone.label])), [zones])
   const colourFor = useMemo(
     () => (zone: string | undefined) => (zone === undefined ? UNZONED : zoneColours.get(zone) ?? UNZONED),
     [zoneColours],
   )
+  const zoneLabelFor = useMemo(
+    () => (zone: string | undefined) => (zone === undefined ? undefined : zoneLabels.get(zone)),
+    [zoneLabels],
+  )
 
-  // Zoom-staged detail: node dots grow a little when you are close enough to aim at them. The threshold is
-  // a ratio of the fit view rather than a pixel size, so a 360 px phone and a 1440 px laptop stage at the
-  // same *physical* scale, not the same screen size.
-  const detailed = viewport.scale > 1.9
-  const zoomPct = Math.round(viewport.scale * 100)
+  // Segments per node, counted from the edge list rather than asked of the graph: the map is allowed to
+  // know how many walkways meet at a place, and is not allowed to reach into `@/engine` to find out.
+  const degrees = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const edge of model.edges) {
+      counts.set(edge.from, (counts.get(edge.from) ?? 0) + 1)
+      counts.set(edge.to, (counts.get(edge.to) ?? 0) + 1)
+    }
+    return counts
+  }, [model])
+
+  const minorIds = useMemo(
+    () => new Set(placeRows.filter((row) => row.minor === true).map((row) => row.id)),
+    [placeRows],
+  )
+  const categoryOf = useMemo(() => {
+    const map = new Map<string, string | undefined>()
+    for (const row of placeRows) map.set(row.id, row.category)
+    return map
+  }, [placeRows])
+
+  const unitsPerPx = worldPerPixel(view.span, plate.width)
+  const toScreen = useMemo(
+    () => (x: number, y: number) => worldToScreen(view, plate, aspect, x, y),
+    [view, plate, aspect],
+  )
+
+  // Only places, gates and entrances compete for labels: a junction has no name worth reading, and giving
+  // it one would take the space a building needs.
+  const requests = useMemo<readonly MarkerRequest[]>(
+    () =>
+      model.nodes
+        .filter((node) => node.kind !== 'junction')
+        .map((node) => ({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          text: node.label,
+          priority: markerPriority(node.kind, minorIds.has(node.id)),
+          wantsBadge: iconFor(categoryOf.get(node.id), node.kind) !== undefined,
+        })),
+    [model, minorIds, categoryOf],
+  )
+  const plan = useMemo(() => planMarkers(requests, { plate, box }), [requests, plate, box])
+
+  const entries = useMemo<readonly MarkerEntry[]>(
+    () =>
+      plan.markers.flatMap((marker) => {
+        // Every marker id came out of `model.nodes` a few lines above, so a missing node here would mean the
+        // plan invented one; `flatMap` drops it rather than substituting a plausible-looking fallback.
+        const node = nodeById.get(marker.id)
+        if (node === undefined) return []
+        const spec = iconFor(categoryOf.get(node.id), node.kind)
+        const degree = degrees.get(node.id) ?? 0
+        const zoneLabel = zoneLabelFor(node.zone)
+        const content = placeTip(node, { zoneLabel, categoryLabel: spec?.title, degrees: degree })
+        const name = `${node.label}, ${node.kind}${zoneLabel === undefined ? '' : `, ${zoneLabel} zone`}, ${degree} walkway segment${degree === 1 ? '' : 's'}`
+        return [
+          {
+            marker,
+            spec,
+            colour: colourFor(node.zone),
+            name,
+            content,
+          },
+        ]
+      }),
+    [plan, nodeById, categoryOf, degrees, zoneLabelFor, colourFor],
+  )
+
+  const iconRows = useMemo(() => {
+    const categories = new Set<string>()
+    // A node with a category is explained by that category's row; one without is explained by its kind.
+    // Same rule as `iconFor`'s lookup, applied to the legend so it lists exactly the glyphs on the plate.
+    const kinds = new Set<string>()
+    for (const row of placeRows) {
+      if (typeof row.category === 'string' && row.category !== '') categories.add(row.category)
+      else kinds.add(row.kind)
+    }
+    return legendIcons(categories, kinds)
+  }, [placeRows])
+  const baseline = useMemo(() => baselineWords(DEFAULT_EDGE_ATTRIBUTES), [])
 
   return (
-    <div className="map-frame">
+    // Tapping anything that is not a marker — the legend, the zoom buttons, the plate's own ground — closes
+    // the open tooltip. The items stop propagation on their own `pointerdown`, which is what separates
+    // "tap a place" from "tap near a place" without any hit-testing here.
+    <div className="map-frame" onPointerDown={() => tooltip.hide()}>
       <svg
         ref={svgRef}
         className={viewport.dragging ? 'map map--dragging' : 'map'}
         viewBox={viewport.viewBox}
         role="application"
-        aria-label={`Campus map: ${model.summary.nodeCount} nodes and ${model.summary.edgeCount} walkway segments. Drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom, 0 to reset.`}
+        aria-label={`Campus map: ${model.summary.placeCount} places over ${model.summary.edgeCount} walkway segments. Drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom, 0 to reset. Each place can be tabbed to for its details.`}
         tabIndex={0}
         {...viewport.bindings}
+        onPointerDown={(event) => {
+          // Tapping the ground closes whatever is open, then hands the gesture to the camera: one press,
+          // two meanings, and the marker's own handler stops the first from cancelling the second's target.
+          tooltip.hide()
+          viewport.bindings.onPointerDown(event)
+        }}
+        onKeyDown={(event) => {
+          tooltip.onEscape(event)
+          viewport.bindings.onKeyDown(event)
+        }}
       >
         <BaseLayer
           width={extent.width}
@@ -73,10 +183,31 @@ export function MapView({ model, canvas, buildings, surfaces, zones, gridStep }:
           surfaces={surfaces}
           surfaceClass={(kind) => `surface--${kind}`}
         />
-        <BuildingLayer buildings={buildings} colourFor={colourFor} />
-        <WalkwayLayer edges={model.edges} positions={positions} />
-        <NodeLayer nodes={model.nodes} colourFor={colourFor} detailed={detailed} />
+        <BuildingLayer
+          buildings={buildings}
+          colourFor={colourFor}
+          zoneLabelFor={zoneLabelFor}
+          nodeLabel={(id) => labels.get(id) ?? id}
+          toScreen={toScreen}
+          tooltip={tooltip}
+        />
+        <WalkwayLayer
+          edges={model.edges}
+          positions={positions}
+          labels={labels}
+          toScreen={toScreen}
+          tooltip={tooltip}
+        />
+        <NodeLayer nodes={model.nodes} colourFor={colourFor} detailed={viewport.scale > 1.9} />
+        <MarkerLayer
+          entries={entries}
+          unitsPerPx={unitsPerPx}
+          toScreen={toScreen}
+          tooltip={tooltip}
+        />
       </svg>
+
+      <MapTip tip={tooltip.tip} plateWidth={plate.width} />
 
       <div className="map-controls">
         <button
@@ -109,15 +240,23 @@ export function MapView({ model, canvas, buildings, surfaces, zones, gridStep }:
         </button>
       </div>
 
-      <p className="map-hud">
-        <span>
-          <b>{zoomPct}%</b> · 1 unit = 1 m
-        </span>
-        <span>
-          {model.summary.edgeCount} segments · {model.summary.totalMetres} m
-        </span>
-        <span className="map-hint">drag to pan · wheel or pinch to zoom · 0 resets</span>
-      </p>
+      <MapLegend
+        zones={zones}
+        icons={iconRows}
+        baseline={baseline}
+        counts={{
+          places: model.summary.placeCount,
+          buildings: model.summary.buildingCount,
+          surfaces: model.summary.surfaceCount,
+          segments: model.summary.edgeCount,
+          metres: model.summary.totalMetres,
+          components: model.summary.componentCount,
+        }}
+        hiddenMarkers={plan.hiddenMarkers}
+        hiddenLabels={plan.hiddenLabels}
+        scalePct={Math.round(viewport.scale * 100)}
+        narrow={plate.width > 0 && plate.width < 700}
+      />
     </div>
   )
 }

@@ -177,36 +177,250 @@
   box-shadow: var(--focus);
 }
 
-.map-hud {
+/* --- markers: badges, labels, hit areas ---------------------------------- */
+
+.marker {
+  cursor: pointer;
+  outline: none;
+}
+
+/* Invisible, and deliberately bigger than the picture: 32 px of finger room around a 26 px badge.
+   `pointer-events: all` because a transparent fill is otherwise not a hit target. */
+.marker-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.badge-plate {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.badge {
+  color: var(--ink-soft); /* Lucide strokes with `currentColor` */
+}
+
+.marker-label {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  fill: var(--map-ink);
+  /* The halo is what lets text sit on top of a building without a plate behind it: paint the stroke under
+     the fill, keep it a constant 3 px whatever the zoom. */
+  paint-order: stroke;
+  stroke: var(--map-halo);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.marker--active .badge-plate,
+.marker:focus-visible .badge-plate {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.marker--active .marker-label,
+.marker:focus-visible .marker-label {
+  fill: var(--accent);
+}
+
+/* --- walkways and buildings: described, not navigated -------------------- */
+
+.walk {
+  cursor: pointer;
+}
+
+/* A wider transparent stroke, because a 3.4 px path is not a hover target. `stroke` (not `all`) keeps the
+   empty middle of the plate from stealing drags that start between two paths. */
+.walk-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+
+.walk--active .walk-fill,
+.walk.marker--active .walk-fill {
+  stroke: var(--accent);
+}
+
+.building {
+  cursor: default;
+  transition: fill-opacity 120ms ease;
+}
+
+.building--active {
+  fill-opacity: calc(var(--building-fill-opacity) * 2);
+}
+
+/* --- overlays: tooltip and legend ----------------------------------------- */
+
+.map-tip {
   position: absolute;
-  left: var(--space-2);
-  bottom: var(--space-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: baseline;
+  z-index: 2;
+  max-width: 224px;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--ink-soft);
-  font: 500 11px/1.4 var(--font-mono);
-  pointer-events: none; /* the readout must never eat a drag that starts on top of it */
-}
-
-.map-hud b {
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
   color: var(--ink);
-  font-weight: 600;
+  font: 400 11px/1.45 var(--font-ui);
+  pointer-events: none;
+  /* Anchored by projection, then pulled up by its own height plus a gap. The tip is never a drop target,
+     so it cannot steal a drag that started on the marker it describes. */
+  transform: translate(-50%, calc(-100% - 10px));
 }
 
-.map-hud .map-hint {
-  color: var(--ink-faint);
-  font-weight: 400;
+.map-tip--below {
+  transform: translate(-50%, 10px);
+}
+
+.map-tip strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.map-tip span {
+  display: block;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
+  max-width: min(340px, 62%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow-raised);
+  color: var(--ink-soft);
+}
+
+.map-legend-toggle {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  min-height: 32px; /* the 4 px grid again, and the same floor the markers obey */
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 650 11px/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.map-legend-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--radius-m);
+}
+
+.map-legend-zoom {
+  margin-left: auto;
+  font: 500 10px/1 var(--font-mono);
+  color: var(--ink-soft);
+}
+
+.map-legend-caret {
+  transition: transform 120ms ease;
+}
+
+.map-legend-caret--stowed {
+  transform: rotate(-90deg);
+}
+
+.map-legend-body {
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.map-legend-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 2px var(--space-2);
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.map-legend-list li {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  font: 500 10px/1.5 var(--font-ui);
+}
+
+.swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.legend-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.legend-line {
+  flex: none;
+  width: 24px;
+  height: 8px;
+}
+
+.legend-line line {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.legend-line .walk-case {
+  stroke-width: 3.6;
+}
+
+.legend-line .walk-fill {
+  stroke-width: 1.8;
+}
+
+.legend-line .walk--stairs {
+  stroke-dasharray: 1.4 2.2;
+  stroke-width: 1.8;
+}
+
+/* `--ink-faint` measured 3.3:1 on the light plate and 4.1:1 on the dark one — under AA for 10 px text.
+   Secondary *is* secondary, but it still has to be readable, so the notes sit on `--ink-soft` (7.9:1). */
+.map-legend-note {
+  margin: 0 0 2px;
+  color: var(--ink-soft);
+  font: 400 10px/1.45 var(--font-mono);
 }
 
 @media (max-width: 640px) {
-  .map-hud .map-hint {
+  .map-legend-hint {
     display: none; /* on a phone the hint is what the fingers are for */
+  }
+
+  .map-legend {
+    max-width: calc(100% - var(--space-4));
   }
 
   /* The plate follows the campus's shape. A tall phone plate cannot show *more* campus — the camera is
@@ -227,7 +441,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-btn {
+  .map-btn,
+  .building,
+  .map-legend-caret {
     transition: none;
   }
 }
