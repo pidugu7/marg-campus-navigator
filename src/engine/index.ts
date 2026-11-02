@@ -70,6 +70,18 @@ export {
 // The three searches share one run object (`algorithms/search-common.ts`), which is why its *option* types
 // are published and the run itself is not: a caller steers a search, it does not drive its maps.
 export { dijkstra } from './algorithms/dijkstra'
+export { aStar, type AStarOptions } from './algorithms/a-star'
+export { bfs } from './algorithms/bfs'
+export {
+  articulationPoints,
+  dfs,
+  depthFirstRoute,
+  reachableFrom,
+  type DfsOptions,
+  type DfsTree,
+  type DfsVisit,
+  type Resilience,
+} from './algorithms/dfs'
 export {
   minutesFor,
   type Expansion,

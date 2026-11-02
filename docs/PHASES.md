@@ -439,3 +439,69 @@ nothing across 148 tests, so it is gone, and the settled-set check fails the tes
 **Not in this checkpoint, on purpose.** BFS, A*, DFS (cp2); the simplification pass and full step wording
 (cp3); the route UI (cp4); the result card, the responsive pass and the rest of the docs (cp5). Nothing in
 `src/ui` changed yet, so the map still draws no route.
+### Phase 3, checkpoint 2 — A*, BFS, DFS: three containers, one run
+
+**What landed.** `algorithms/a-star.ts`, `algorithms/bfs.ts`, `algorithms/dfs.ts`, their three spec files,
+`__tests__/search-parity.spec.ts`, `src/test/campus-routing.spec.ts`, the exports they needed from
+`src/engine/index.ts`, and `ALGORITHMS.md` §6, §7 and §9 written against numbers taken out of the runs rather
+than out of my head. No UI: `src/ui` is untouched, so the map still draws no route — cp4.
+
+**The design decision the checkpoint turns on.** `SearchRun` used to choose between a heap and a queue with a
+set called `cheapestWins`. It now holds a policy table — `dijkstra: heap`, `a-star: heap`, `bfs: queue`,
+`dfs: stack` — and *that is the entire difference between the four searches*. Same frontier records, same
+`offer`/`next`/`expand`, same settled set, same refusal order, same snapshot code. A* differs from Dijkstra by
+one expression (`priority = cost + h`); BFS and DFS differ by which end of an array they read. Naming it
+mattered: `cheapestWins` stopped being true the moment a second heap search existed, and a misleading name in
+a shared module is worse than a longer one.
+
+A consequence of the shared run, worth stating because it looks like a bug in a demo: BFS and DFS accumulate
+`cost` in **hops**, not metres, and `offer()` refuses a later record for a vertex a queue or stack search has
+already seen. First-in wins, which is what makes BFS hop-optimal — and is also why DFS returns a valid route
+rather than a good one. `RouteFound` carries `metres` alongside `cost` precisely so the two can be printed
+against each other.
+
+**A\*'s heuristic and the closure set.** `minCostPerUnit` skips edges priced `Infinity`, so a profile that
+closes staircases raises the scale rather than poisoning it, and the estimate stays admissible under closures.
+That single line is the reason A* and Dijkstra agree on the 200-graph sweep *with* blocked edges and not
+merely despite them; measured directly on 80 tiny graphs against `floydWarshall`'s all-pairs truth, in both
+directions of one-way edges.
+
+**DFS, and the two views that must not be merged.** `dfs` walks out-arcs (a walker's graph), `articulationPoints`
+walks `edgesAt` (a campus's graph). The second is what Phase 6's resilience report needs, because a one-way
+walkway does not stop a place being part of the campus. Both are iterative on explicit stacks — the 5 000-vertex
+line test is the licence for that, and it is Phase 7's map editor that will need it. `cycle` ignores the arc that
+walks back along the same edge id, or every corridor in the app would "contain a cycle".
+
+**Measured.** `npm run check`: typecheck · lint · **418 tests in 23 files** · build ok (`dist` js unchanged at
+286.69 kB, because nothing in `src/ui` imports a search yet). `src/engine` is 246 (was 166): a-star 22,
+dfs 26, bfs 17, plus cp1's 127 and `search-parity` 15. Coverage: `a-star.ts`, `bfs.ts`, `dfs.ts` **100 %
+statements and branches** on their first run — `dijkstra.ts`, `measure.ts`, `path-utils.ts` still 100/100, and
+`search-common.ts` still 99.15 / 96.47 with only cp1's three documented arms open (their line numbers moved to
+333 / 355 / 392 when the policy table grew the file; `ALGORITHMS.md` §8 now records the new ones and says why).
+On `campus.json`, all 380 ordered pairs of named places: 0 refusals, A* settles strictly fewer vertices on 374
+pairs and ties on 6 (3 043 settlements total against Dijkstra's 8 605 — 8.0 per query against 22.6, on a map of
+39), BFS's routes are 5 042.7 m longer in aggregate, depth-first's 291 146.1 m longer, and the longest route on
+campus is 1 517.7 m (`Research Labs → Hostel Block 2`).
+
+**Test support that is now shared, and why.** `__tests__/helpers.ts` gained `sweepGraphs` (the seeded 200-graph
+driver: node count, one-way chance, disconnection and a fifth of the edges closed all as functions of the trial
+number, so trial 137 is the same graph in every spec), the four search fixtures, `unravelledIndex`, and
+`refusalLadder` — the six broken inputs every algorithm must refuse identically, written once. Dijkstra's own
+spec was refactored onto `sweepGraphs` (its 19 tests and their claims are unchanged; its graphs are now the
+shared shapes, so "the same 200 graphs" means the same graphs). The ladder exists because a `RouteResult` union
+is only worth having if a screen can branch on `result.reason` without knowing which search answered: parity
+between algorithms is a contract, and a contract in four files is four chances to drift.
+
+**Two guard and two spec corrections made on the way.** `architecture.test.ts` was counting "is a test file" by
+filename only, which left `src/engine/__tests__/helpers.ts` forbidden from importing `vitest` while being the
+engine's test-support module; the rule now recognises the `__tests__` directory *for the framework exemption
+only*, with a test of the guard itself pinning that the network and platform-global scans still read that file
+(`isTest` stays false). And three of my own spec expectations were wrong while the engine was right — a
+frontier recorded before its own pushes (so `[]` is row 1's answer, not a missing frame), `minCostPerUnit`
+measuring the *drawing* (the square's diagonal is 141.42 units of it, not its labelled 250 m), and `metres`
+equality across two searches whose profiles were unit-cost, where equal cost does not imply equal length. All
+three fixed in the specs. One real flake came out of it too: the ladder asserted `ms === 0` against the default
+`Date.now`, which can tick — it now injects the clock, which is what the seam is for.
+
+**Not in this checkpoint, on purpose.** `simplifyLegs` (cp3), the route UI (cp4), the result card, the
+responsive pass and README/ARCHITECTURE (cp5).

@@ -8,6 +8,7 @@ import {
   floydWarshall,
   indexOfGraph,
   randomGraph,
+  sweepGraphs,
   type GeneratedGraph,
 } from '../__tests__/helpers'
 import { dijkstra } from './dijkstra'
@@ -301,49 +302,35 @@ describe('dijkstra, pinned', () => {
 
 describe('dijkstra, against Bellman-Ford on 200 seeded graphs', () => {
   it('matches the naive relaxation for every source on every graph', () => {
-    const rng = createRandom(BASE_SEED ^ 0xd16e57)
-    for (let trial = 0; trial < 200; trial++) {
-      const generated = randomGraph(4 + (trial % 25), rng, {
-        extraEdges: 2 + (trial % 12),
-        oneWayChance: trial % 4 === 0 ? 0.35 : 0,
-        disconnected: trial % 7 === 0,
-      })
-      const blocked = new Set<EdgeId>()
-      if (trial % 2 === 1) {
-        // Close a fifth of the walkways on half the graphs: the cheapest way to make "the detour is found"
-        // and "unreachable is reported as unreachable" one assertion instead of two fixtures.
-        const rng2 = createRandom(BASE_SEED ^ (0xb10c + trial))
-        for (const edge of generated.edges) if (rng2.bool(0.2)) blocked.add(edge.id)
-      }
-      const index = indexOfGraph(generated)
-      const options = { blockedEdges: blocked as ReadonlySet<EdgeId> }
-      // Four sources per graph, stepped through the vertex list rather than drawn at random, so every trial
-      // is reproducible and the whole sweep stays inside a second. All-pairs against an independent matrix is
-      // the next test; this one is about volume of shapes, not about covering one shape completely.
-      const picked = [0, 7, 13, 21].map((offset) => generated.nodes[(trial * 3 + offset) % generated.nodes.length] as { readonly id: string })
-      for (const source of picked) {
-        const reference = bellmanFord(source.id, generated, { blockedEdges: blocked })
+    // 200 shapes, four sampled sources each, every vertex as a target, under the same closure set the search
+    // was given. The reference answers with a number, so that is what is compared; the path itself is audited
+    // edge by edge by `assertIsAPath`, because two algorithms can agree on a cost and one of them can have
+    // returned a walk that is not a walk.
+    sweepGraphs(200, 'dijkstra/bellman-ford', ({ trial, generated, index, blocked, sources }) => {
+      const closures: ReadonlySet<EdgeId> = blocked
+      for (const source of sources) {
+        const reference = bellmanFord(source, generated, { blockedEdges: blocked })
         for (const target of generated.nodes) {
-          const result = dijkstra(index, source.id, target.id, options)
+          const result = dijkstra(index, source, target.id, { blockedEdges: closures })
           const expected = reference.get(target.id) ?? Number.POSITIVE_INFINITY
           if (!Number.isFinite(expected)) {
-            expect(result.ok, `trial ${String(trial)} ${source.id} to ${target.id}: expected no route`).toBe(false)
+            expect(result.ok, `trial ${String(trial)} ${source} to ${target.id}: expected no route`).toBe(false)
             if (!result.ok) expect(result.reason).toBe('disconnected')
             continue
           }
           if (!result.ok) {
-            // A source asked about itself always has a route, so the only legitimate refusal left is a
-            // vertex stranded by the closures — which the reference agrees is infinite, and it did not.
-            return expect(`trial ${String(trial)}: ${source.id} to ${target.id} refused with ${result.reason} at cost ${String(expected)}`).toBe('a route')
+            // A source asked about itself always has a route, so the only legitimate refusal left is a vertex
+            // stranded by the closures — which the reference agrees is infinite, and it did not.
+            return expect(`trial ${String(trial)}: ${source} to ${target.id} refused with ${result.reason} at cost ${String(expected)}`).toBe('a route')
           }
-          expect(Math.abs(result.cost - expected), `trial ${String(trial)} ${source.id} to ${target.id} cost`).toBeLessThanOrEqual(COST_EPSILON)
+          expect(Math.abs(result.cost - expected), `trial ${String(trial)} ${source} to ${target.id} cost`).toBeLessThanOrEqual(COST_EPSILON)
+          expect(result.nodeIds[0], `trial ${String(trial)}: starts at the origin`).toBe(source)
           expect(result.nodeIds[result.nodeIds.length - 1], `trial ${String(trial)}: ends at the destination`).toBe(target.id)
-          expect(result.nodeIds[0], `trial ${String(trial)}: starts at the origin`).toBe(source.id)
           expect(result.expanded).toBeLessThanOrEqual(index.size)
-          if (source.id !== target.id) assertIsAPath(index, result, trial, blocked)
+          if (source !== target.id) assertIsAPath(index, result, trial, blocked)
         }
       }
-    }
+    })
   })
 
   it('agrees with Floyd–Warshall on all-pairs costs for 30 tiny graphs', () => {

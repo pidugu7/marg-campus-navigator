@@ -14,10 +14,10 @@ owes each test).
 | 3 | union-find | `structures/union-find.ts` | components at build time, closure resilience | **done** (Phase 1) |
 | 4 | LRU cache | `structures/lru-cache.ts` | memoised route results | **done** (Phase 1) |
 | 5 | adjacency graph | `structures/graph.ts` | the `GraphIndex` every algorithm reads | **done** (Phase 1) |
-| 6 | BFS | `algorithms/bfs.ts` | hop-shortest path, k-hop reachability | pending (Phase 3, cp2) |
-| 7 | DFS | `algorithms/dfs.ts` | cycle check, articulation points / bridges | pending (Phase 3, cp2) |
+| 6 | BFS | `algorithms/bfs.ts` | hop-shortest path, k-hop reachability | **done** (Phase 3, cp2) |
+| 7 | DFS | `algorithms/dfs.ts` | cycle check, articulation points / bridges | **done** (Phase 3, cp2) |
 | 8 | Dijkstra | `algorithms/dijkstra.ts` | exact weighted shortest path | **done** (Phase 3, cp1) |
-| 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | pending (Phase 3, cp2) |
+| 9 | A\* | `algorithms/a-star.ts` | default router on the 2D plane | **done** (Phase 3, cp2) |
 | 10 | cost profiles | `routing/cost.ts` | fastest / shaded / step-free / quiet | pending (Phase 4) |
 | 11 | turn-by-turn | `algorithms/path-utils.ts` | directions text from a path | legs and wording **done** (cp1); the simplification pass is cp3 |
 | 12 | geometric measure | `geo/measure.ts` | compass words, turn angles, and the A\* scale | **done** (Phase 3, cp1) |
@@ -257,6 +257,155 @@ and the highlight-on-select feature would have quietly missed half the incident 
 edge in both endpoints' incident lists, while `#out` keeps direction, is the fix;
 `stores an undirected edge twice and a one-way edge once` pins it.
 
+## 6. Breadth-first search — `algorithms/bfs.ts`
+
+**What it is for.** The fewest *walkways*, not the fewest metres. That makes BFS the wrong answer to "how do I
+get to my class" and the right answer to three questions the app actually asks elsewhere: what is reachable in
+`k` steps (Phase 5's explored-region overlay), what a closure strands (Phase 6), and whether a place is
+connected to anything at all.
+
+**Complexity.** `O(V + E)` time, `O(V)` frontier. No heap, so no `log V`, and — the property no other search
+here has — the running time does not depend on the cost function's *values* at all. `minCostPerUnit` is not
+consulted, `metres` are summed but never compared.
+
+**Invariant.** When a vertex leaves the queue, `cost[vertex]` is the minimum number of edges from the origin to
+it, and every vertex still in the queue has cost ≥ that. Both halves come from one fact: the queue is FIFO and
+every offer from a settled vertex carries cost+1, so costs are non-decreasing along the queue. A shorter route
+to `v` would have been discovered from a cheaper-or-equal frontier position and would already have been
+popped. `bfs.spec.ts` does not argue this — it computes the same numbers with `minimumHopCounts`, a
+level-by-level scan written with `Array.prototype.filter` and no shared code, on **200 seeded graphs × four
+sources × every vertex**.
+
+**The `cost` field means something different here, on purpose.** A queue search minimises edges, so `cost` is
+the hop count and `metres` is the length of the route it chose. That is why `RouteFound` carries both, and why
+the first pinned test in `bfs.spec.ts` is the unflattering one: on the square with a 250 m diagonal,
+
+```
+bfs   a → c   path a,c      cost 1     metres 250   expanded 4   explored a,b,d,c
+dijkstra a → c   path a,b,c  cost 200   metres 200   expanded 4   explored a,b,d,c
+```
+
+Same graph, same closure set, both correct, 50 m apart. `cost` is "what this search was minimising" and never
+"metres"; the card shows `metres`.
+
+**Worked example, to the array.** `ladderCrossing()` in `src/engine/__tests__/helpers.ts` is the square `a(0,0)
+b(100,0) c(100,-100) d(0,-100)` with 100 m walkways on the sides, the same 250 m diagonal `a—c`, and one edge
+id per walkway (a two-way path stores *two arcs under one id*, which is what makes `blockedEdges` mean what
+Phase 6 needs it to mean). From `a`:
+
+| pop | settled | why now | pushed by it | queue after the pop | frontier snapshot |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `a@0` | the seed | `b@1`, `d@1`, `c@1` — all one hop | `b, d, c` | `[]` |
+| 2 | `b@1` | first in, first out | `c` is already seen, so refused at the door | `d, c` | `["c","d"]` |
+| 3 | `d@1` | next in line | `c` already seen | `c` | `["c"]` |
+| 4 | `c@1` | the destination — return | — | empty | `[]` |
+
+Every snapshot is `[cost, id]`-sorted by the same `compareOffers` the heap uses, so a queue search prints
+`["c","d"]` where the queue's own order was `d, c`: a replay overlay wants "what would this search consider
+next", not "how the arrays happened to be filled".
+
+And the last column is deliberately one step behind the fourth: a snapshot is recorded at the moment `next()`
+returns, *before* the caller has expanded what it took — so what a replay draws is the frontier the search was
+holding while it chose, not the one it left behind. Row 1's `[]` is that offset, not a missing frame.
+
+**A closure changes which routes exist, not what is optimised.** With `a-c` shut, BFS returns `a,b,c` at 2 hops
+and 200 m — the same route Dijkstra returns, for the different reason that there is now nothing shorter in
+hops either. And a profile that closes the *edges* of a one-way ring can strand a vertex without touching the
+hop count; `bfs.spec.ts` pins the case where an exhausted search's `exploredOrder`, sorted, is exactly
+`reachableFrom`'s answer from `dfs.ts` — two containers agreeing on one set.
+
+**Tests.** 17 in `bfs.spec.ts`, of which 7 are the shared refusal ladder (`refusalLadder` in
+`src/engine/__tests__/helpers.ts`) — unknown origin, unknown destination, both unknown, empty map, two
+components, a destination stranded by closures, a cost function returning `0`/`-1`/`NaN`/`-Infinity`/
+`undefined`/`'100'`, all refused with the same `{ reason, message }` dijkstra uses. Then: the diagonal
+pin above, non-decreasing settlement on a line (`exploredOrder a,b,c,d` and four empty snapshots — a line's
+frontier is never wider than one vertex), the one-way detour, minutes derived from metres and not from hops,
+determinism across two runs, the 200-graph hop parity, the unit-profile equality with Dijkstra, and the
+mirror test that asserts BFS's route is *never shorter* in metres than Dijkstra's on 120 seeded graphs —
+the one cross-algorithm inequality a hop count always satisfies.
+
+---
+
+## 7. Depth-first search — `algorithms/dfs.ts`
+
+**Two questions, two functions, one file.** `dfs` walks **out-arcs only** — the way a walker must actually go —
+and answers "what is reachable" and "is there a directed cycle". `articulationPoints` walks the **weak
+structure** — every incident edge, direction ignored — and answers "would removing this place cut the campus
+in half". They are separate because the answers are genuinely different: a one-way walkway makes a vertex a
+cut in the directed sense while severing nothing physically. Phase 6's report prints both numbers, and this
+file is where the distinction is enforced rather than remembered.
+
+**Complexity.** Both are `O(V + E)` time and `O(V)` state, in one pass. The articulation pass produces cut
+vertices *and* bridges from the same traversal, which is the point of Tarjan's `low` link: a second pass to
+find bridges would be a second chance to disagree about the DFS tree.
+
+**Iterative, deliberately.** Every walk here runs on an explicit stack of frames carrying a mutable `cursor`.
+The campus is 39 nodes, so recursion would work today; the map editor (Phase 7) will ingest a traced plan of a
+few thousand vertices, and a recursive DFS costs one call frame per vertex — a data-dependent graph becomes a
+`RangeError` in a browser, in the one place in the app where the data comes from outside. `dfs.spec.ts` walks a
+**5 000-vertex line** and asserts the last visit's depth is 4 999, so "it was written iteratively" is a
+measured claim and not a style preference.
+
+**Invariant (`dfs`).** A vertex is on the stack exactly while its subtree is open, so: (i) discovery order
+`visits` is a pre-order and `postOrder` is the matching post-order; (ii) an edge into a vertex *still open on
+the stack* is a back edge, and one exists **iff** the directed graph has a cycle; (iii) `treeEdgeIds` has
+exactly `|reachable| − 1` entries, because each records a first discovery.
+The cycle test has one deliberate subtlety, and it is the difference between a useful flag and a joke:
+walking **back along the walkway you came along does not count**, because a two-way corridor is one edge id
+with two arcs. Without that skip, any campus with any corridor in it "has a cycle" — a fact about the data
+model, reported as a fact about the map. `dfs.spec.ts` pins both halves: the line reports `cycle: false`, the
+square reports `cycle: true` with *two* back edges (the ring, and the diagonal closing a second one).
+
+**Invariant (`articulationPoints`).** With `disc[v]` the discovery index and `low[v]` the smallest `disc`
+reachable from `v`'s subtree by at most one non-tree edge: for a non-root `p`, `p` is a cut vertex iff some
+child `c` has `low[c] ≥ disc[p]`, and the edge `p—c` is a bridge iff the inequality is strict. A root is a cut
+vertex iff it has two or more DFS children — the one test that is not a low-link comparison, and the one most
+often omitted. The parent is skipped by **edge id**, never by vertex: skip the vertex and two parallel
+walkways between the same pair (a ramp and a stair, legal in this data model by design) are reported as
+bridges, which is the classic bug in this algorithm and is pinned as a named test.
+
+**Worked example.** `ladderBarbell()`: `a—b—c—d` with `c—e` and `e—a` closing a loop, so `d` hangs off `c`.
+The incident lists are read in edge-insertion order, and that is all the traversal needs.
+
+| vertex | `disc` | `low` | children | conclusion |
+| --- | --- | --- | --- | --- |
+| `d` | 4 | 4 | 0 | its parent `c` is not a root and `4 > 3`, so `c—d` **is a bridge**; `4 ≥ 3`, so `c` **is a cut vertex** |
+| `e` | 5 | 1 | 0 | `e—a` is a back edge to the root, so `low[e] = 1`; `1 < 3` — neither a bridge nor a cut through `c` |
+| `c` | 3 | 1 | 2 | inherits `1` from `e`; `1 < disc[b] = 2` → `b—c` is not a bridge |
+| `b` | 2 | 1 | 1 | `1 < 1`? no — and not `>`, so `a—b` is not a bridge either |
+| `a` | 1 | 1 | 1 | the root, with one child → **not** a cut vertex, though removing it would still cost `b` its far side |
+
+Reported: `{ cutVertices: ["c"], bridges: ["c-d"], componentCount: 1 }` — which is what
+`articulationPoints(ladderBarbell())` returns, and what the spec then checks by *deletion*: the rebuilt graph
+without `c` has **2** components, and without `b` it has 1.
+
+**Deletion is the oracle, on 40 seeded graphs.** A low-link with an off-by-one in the `low` update still prints
+a plausible set of names, so no reported name is believed. For **every** vertex of every trial graph the spec
+rebuilds the graph without it and counts components with `weakComponentsReference` (union-find over the undirected
+view, no DFS in sight); for **every** edge it rebuilds without that walkway and counts again. `severed` must equal
+`reported`, in both directions, which is what catches the missed cut vertex that a "did we report only real
+ones?" test cannot. `dfs.ts` sits at 100 % statements and 100 % branches with no unreachable-arm note, because
+there are none.
+
+**`depthFirstRoute`, and why it is in the app but not in the picker.** It returns a `RouteResult` — same union,
+same refusals (7 ladder cases pass verbatim), same walkable path — and it is *not* a shortest-path claim: with a
+LIFO frontier the search commits to whichever branch it opened last. On the square, `a`'s adjacency is
+`[b, d, c]`, so `c` is pushed last and popped first: the route is the 250 m diagonal, `expanded` is 2 where
+Dijkstra needs 4, and `cost` is 1 because a stack search counts hops and calls nothing else `cost`. Across the
+**380 ordered pairs of named places on `campus.json`**, the depth-first route is longer than the cheapest one
+on **286 of them**, by 291 146 m in total — an average of 766 m of unnecessary walking per pair. That number is
+the phase's argument in one line, so it is asserted in a test rather than written into a paragraph.
+
+**Tests.** 26 in `dfs.spec.ts`: five on the walk (order and depths, "the way back is not a loop" / the square
+is, the one-way circuit, a closure, an unknown start), one on `reachableFrom`, the 5 000-vertex line, five on
+the weak structure (barbell, every middle of a line, parallel walkways are not bridges, component counting, the
+physical-vs-traffic distinction), the 40-graph deletion sweep, one `closedEdges` parity case with a loop cut,
+one on the hand-built index that lost a vertex, and the 7-ladder refusals.
+
+---
+
+---
+
 ## 8. Dijkstra — `algorithms/dijkstra.ts`, on `algorithms/search-common.ts`
 
 **Why it exists.** Every "shortest route" claim in the app reduces to this: with a cost function that is
@@ -306,15 +455,103 @@ graphs against `floydWarshall` all-pairs (a matrix algorithm shares no code with
 graphs checked for the symmetry an undirected campus must have.
 
 **Unreachable by construction, so left open on purpose** (both arms, one line each):
-`search-common.ts:316` `if (parent === undefined) break` inside the parent walk — `#parent` is written for
+`search-common.ts:333` `if (parent === undefined) break` inside the parent walk — `#parent` is written for
 every settled vertex other than the origin, and the walk starts at a settled vertex, so a missing parent
-would mean the run contradicted its own bookkeeping; and `search-common.ts:338` the `?? this.#from` label
+would mean the run contradicted its own bookkeeping; and `search-common.ts:355` the `?? this.#from` label
 fallback in the zero-length case, which `checkEndpoints()` has already proven exists; and
-`search-common.ts:370` the `0` the offer comparator returns for two offers with the same priority *and* the
+`search-common.ts:392` the `0` the offer comparator returns for two offers with the same priority *and* the
 same id, which `offer()` makes impossible (a re-offer must be strictly cheaper to be kept at all). It stays
-because a comparator that never answers `0` is not a total order, and `MinHeap.isHeapOrdered()` audits `<=`. Both are typed that way
+because a comparator that never answers `0` is not a total order, and `MinHeap.isHeapOrdered()` audits `<=`. All three are typed that way
 because `GraphIndex.node()` and `Map.get()` answer `undefined` for *any* index, and the alternative was an
-assertion or a cast that says the same thing less honestly.
+assertion or a cast that says the same thing less honestly. (The three line numbers moved from 316/338/370
+when cp2 gave the shared run a third container; the arms themselves did not change, and `npx vitest run
+--coverage src/engine` still reports exactly these and nothing else.)
+
+---
+
+## 9. A\* — `algorithms/a-star.ts`
+
+**What it is for.** The default router. A\* is Dijkstra with one line changed — the number it puts in the
+heap's priority slot is `cost + h` instead of `cost` — and on a map where distance means something, that one
+line is most of the running time.
+
+**Complexity.** `O((V + E) log V)` worst case, identical to §8: a bad heuristic cannot make A\*
+asymptotically *slower*, only wasteful. What an admissible, consistent `h` buys is the constant — the settled
+set shrinks from "every vertex closer than the destination" to "every vertex whose *estimate of the total* is
+below it", which on a campus is a corridor instead of a circle.
+
+**Invariant.** A vertex is settled only when its `f = g + h` is the smallest on the frontier. Optimality
+follows from that **if and only if** `h` never overestimates the true remaining cost (admissible) — which
+makes admissibility a correctness property here, not a performance one. Consistency (`h(u) ≤ w(u,v) + h(v)`,
+the triangle inequality for the estimate) is what additionally lets the search return the moment the
+destination is settled instead of draining the heap, and it is why the `if (settled.id === to) return` line in
+`a-star.ts` is legal rather than lucky.
+
+**Where the estimate comes from, and why not from a constant.** The engine cannot see `canvas.pixelsPerMetre`
+(that is `src/data`'s fact, and §5's rule is that the engine does not import it), so the scale is *measured
+from the graph*: `minCostPerUnit` in `geo/measure.ts` takes the cheapest cost per drawn unit among the edges
+this run may traverse, and `h = that × euclidean`. Two consequences worth having on the record — the estimate
+follows the closure set, so blocking walkways cannot leave `h` overreaching; and a profile that charges per
+edge rather than per metre lowers the bound by the longest *drawing* on the map, not the longest walk.
+
+**Admissibility is measured, not asserted.** `a-star.spec.ts` builds 80 tiny seeded graphs, computes the true
+remaining cost for every ordered pair with `floydWarshall` — a matrix algorithm that shares no code with a
+search — and checks `h(v, t) ≤ d(v, t)` for every vertex and every target, in both directions of every one-way
+edge, with walkways closed and open. That is the test that would fail if `minCostPerUnit` were replaced by a
+metres-per-unit constant, which is the tempting shortcut §12 exists to prevent.
+
+**Worked example, against §8's table.** The same square: `a(0,0) b(100,0) c(100,-100) d(0,-100)`, 100 m sides,
+a 250 m `a—c` diagonal, one edge id per walkway, cost = metres. `minCostPerUnit` is 1, so `h` is the drawn
+distance to `c`: `h(a) = 141.42`, `h(b) = 100`, `h(d) = 100`, `h(c) = 0`.
+
+| pop | settled | why now | what it changes | heap once its pushes are in |
+| --- | --- | --- | --- | --- |
+| 1 | `a@f=141.42` | the seed, `g=0 + h=141.42` | `b@f=200`, `d@f=200`, `c@f=250` | `b@200, d@200, c@250` |
+| 2 | `b@f=200` | ties with `d` at 200; the comparator breaks it on id, `b < d` | `c@200` beats `c@250`, so `c` is re-offered and the 250 entry stays in the heap as a receipt | `c@200, d@200` |
+| 3 | `c@f=200` | ties with `d` again, and `c < d` — the **destination** is settled, return | — | `d@200` (never drawn) |
+
+Same route as §8 (`a,b,c`, `cost 200`, `metres 200`, `minutes 2.4`), one fewer settlement, and `d` never
+settled at all: `d@f=200` can only lead to `c@≥200`, which the search has already achieved. `expanded` 3
+against 4, `frontierSnapshots` `[[], ["d","c"], ["d"]]` against `[[], ["d","c"], ["c"], []]` — three frames to
+four, because the third pop ended the run, and each frame is the frontier *before* that pop's own pushes (§6).
+
+**On the real campus, the same claim at scale.** All 380 ordered pairs of named places in `campus.json`,
+default profile, no closures: A\* settles strictly fewer vertices on **374** of them, ties on 6, and loses on
+none — 3 043 settlements in total against Dijkstra's 8 605, a mean of 8.0 vertices per query where the
+uninformed search needs 22.6 of the 39 the map has. `src/test/campus-routing.spec.ts` asserts the
+per-pair `expanded` inequality, the `cost` equality to 1e-6, and the two aggregates, so a heuristic that
+quietly stopped helping fails a test instead of quietly costing the app 15 vertices a click.
+
+**Why A\* is faster than Dijkstra, in plain words.** Dijkstra grows its search in every direction, like
+water from a burst pipe; it will settle the library behind you before it settles the gate ahead of you,
+because "ahead" and "behind" are the same distance from the start. A\* keeps the same queue but changes the
+number in it: not "how far have I come" but "how far have I come, *plus* how far this vertex still looks".
+Straight-line distance to the goal is a lower bound on the walk, so a vertex that is far along the way can
+never outrank a vertex that is near the end. It stops exploring sideways the moment sideways looks pointless,
+which is most of the time on a corridor-shaped campus, and it still cannot be fooled into a longer route —
+because the bound is a *lower* bound, an underestimate. The instant it is an overestimate, all that pruning
+turns into guessing, and the answer is wrong: `× 10` on the square returns the 250 m diagonal.
+
+**The inadmissible case ships as a test, not as a warning.** `heuristic: (a, b) => euclidean(a, b) * 10` on
+the square settles `a`, then `c` through the diagonal, and hands back 250 m. The route is legal, one-way-safe
+and repeatable; it is 50 m worse. This is the whole reason admissibility is stated as an invariant above: there
+is no runtime check that can catch it, because nothing about one call tells you whether a function is a lower
+bound.
+
+**Refusals, and what `Infinity` means.** A\* shares `checkEndpoints` and `refusedCost` with §8 — same order of
+questions, same messages (the 7 ladder cases), and the same rule that `Infinity` from a cost function closes a
+walkway rather than breaking the graph. A\* has one more way to fail quietly, which is why `h` falls back to
+`0` for any endpoint the index cannot place: a `NaN` priority would park a vertex at the bottom of the heap
+forever, and the search would report "no route" about a 100 m walkway.
+
+**Tests.** 22 in `a-star.spec.ts` (7 of them the ladder): zero-scale equivalence to Dijkstra *path-for-path*
+and expansion-for-expansion on 60 graphs, the 200-graph × three-profile cost parity with `expanded` ≤, the 80
+graphs of measured admissibility, the `minCostPerUnit` pins above, the `×10` wrong answer and its admissible
+counterpart, one-way handling, a forced detour, unit-profile minutes, snapshot determinism and `trace: false`,
+the unplaceable-vertex fallback, and the metric labels. Plus 15 in
+`src/engine/__tests__/search-parity.spec.ts`, which is where "the same broken input refuses identically on all
+four searches" and "all four agree on whether a pair is routable at all" (60 seeded graphs) live: claims about
+the searches *resembling each other*, which no single algorithm's own file can make.
 
 ---
 
@@ -397,21 +634,13 @@ is the outcome a reference model is supposed to have.
 
 ---
 
-## 6, 7, 9, 10 — still to come in this phase
+## 10 — still to come in this phase
 
-Claims already made, still to be tested at the checkpoint named:
-
-- **BFS** (cp2) is hop-shortest, and equals Dijkstra when every weight is 1.
-- **DFS** (cp2) finds articulation points; every reported cut vertex must actually disconnect the graph when
-  removed, verified by rebuilding without it.
-- **A\*** (cp2) returns the same *cost* as Dijkstra on every fixture pair while expanding **fewer or equal**
-  vertices. If A\* is not cheaper on this map, the heuristic is wrong — and that test is what will say so.
-  The same checkpoint ships the case where an *inadmissible* heuristic returns a longer route, so the reason
-  §12 exists is on the record rather than in a footnote.
-- **Cost profiles** (Phase 4) are weight functions, not separate algorithms; `non-positive-cost` is what stops
-  a profile from breaking the invariant in §8.
-
----
+**Cost profiles** (Phase 4) are weight functions, not separate algorithms. Everything §6–§9 promise about a
+profile is already half-tested from the search side — `Infinity` closing a walkway and being excluded from the
+heuristic's scale, a non-positive cost refused as `invalid-graph`, `minutes` derived from the profile's pace —
+but the four profiles themselves (`fastest`, `shaded`, `step-free`, `quiet`) are §10's own claims, and
+`non-positive-cost` is the rule that stops a profile from breaking §8's invariant.
 
 ## Benchmarks (Phase 4)
 
@@ -425,5 +654,23 @@ query trace; `buildComponents` rebuild cost per closure (the number that justifi
 
 ## Measured results
 
-*(populated in Phase 4. Nothing above is a measurement; the numbers cited so far — 95 tests, the
-n = 5 000 rank-bound case, 500/5 000/120-step property trials — are all from `npm test`.)*
+*Re-measured at Phase 3 checkpoint 2, `npm run check` on this branch (Vitest, Node in the project's own
+sandbox). These are test-suite facts, not benchmark timings — `npm run bench` is Phase 4 and nothing in this
+table is a measurement of speed.*
+
+| what | measured |
+| --- | --- |
+| `npm run check` | typecheck · lint · **418 tests in 23 files** · build ok |
+| `src/engine` | **246 tests** — structures 77, `algorithms/` 127 (search-common 26, a-star 22, dfs 26, dijkstra 19, bfs 17, path-utils 17), geo 21, `__tests__/` 21 (contract 6, search-parity 15) |
+| `src/data` | 83 (`build-graph.spec.ts`) |
+| `src/ui/map` | 64 (view 25, marker-plan 15, tip-content 16, icons 8) |
+| `src/test` | 25 — architecture guard 13, `map:validate` 6, campus routing 4, schema drift 2 |
+| coverage of the four searches | `dijkstra.ts`, `a-star.ts`, `bfs.ts`, `dfs.ts`, `measure.ts`, `path-utils.ts` all **100 %** statements and branches; `search-common.ts` 99.15 / 96.47, with the three arms listed under §8 and nothing else open |
+| sweeps behind the algorithm claims | Dijkstra vs Bellman–Ford **200** graphs × 4 sources × every vertex, plus 30 vs Floyd–Warshall and 25 symmetry; A\* vs Dijkstra **200** graphs × 3 profiles, zero-scale equivalence on **60**, measured admissibility on **80**; BFS vs hop count **200**; DFS deletion oracle **40** graphs, every vertex and every edge; depth-first route validity on **120** |
+| the campus, 380 ordered place pairs | 0 refusals (one component, as `map:validate` says); A\* settles fewer vertices on **374** pairs and ties on 6, **3 043** settlements against Dijkstra's **8 605**; BFS's routes are 5 042.7 m longer in total, depth-first's 291 146.1 m longer; longest pair measured 1 517.7 m (`Research Labs → Hostel Block 2`) |
+| `npm run map:validate` | 39 nodes, 56 edges, 20 places, 13 buildings, 8 surfaces, 6 zones · 1 component · 9 415.3 m of walkway · 0 errors, 2 warnings, exit 0 |
+| bundle | `dist/assets/index-*.js` 286.69 kB (gzip 90.32 kB) — unchanged from cp1, because no UI module imports the searches yet; Phase 3 cp4 is where they reach a screen |
+| the 5 000-vertex line | `dfs.spec.ts`: 5 000 visits, last depth 4 999, no `RangeError` |
+
+The n = 5 000 rank-bound case and the 500/5 000/120-step property trials cited in §1–§5 are Phase 1's and
+still stand; they are included in the 246.

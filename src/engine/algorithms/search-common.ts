@@ -76,8 +76,20 @@ export interface Expansion {
 
 const defaultCost: EdgeCost = (edge) => edge.metres
 
-/** The searches that draw their next vertex from the heap, as opposed to the one that draws from a queue. */
-const cheapestWins: ReadonlySet<AlgorithmName> = new Set(['dijkstra', 'a-star'])
+/**
+ * Which container each search draws its next vertex from, and that is the complete list of differences
+ * between the four: a heap ordered by cost, a heap ordered by cost-plus-estimate (`a-star`, which differs
+ * from `dijkstra` only in what it puts in `priority`), a queue, and a stack.
+ *
+ * The two ordered-by-cost entries are what `cheapestWins` was before A* landed: a name that stopped being
+ * accurate the moment a second heap search appeared, and a misleading one is worse than a longer one.
+ */
+const POLICY: Readonly<Record<AlgorithmName, 'heap' | 'queue' | 'stack'>> = {
+  dijkstra: 'heap',
+  'a-star': 'heap',
+  bfs: 'queue',
+  dfs: 'stack',
+}
 
 /**
  * One search, start to finish.
@@ -98,6 +110,7 @@ export class SearchRun {
   readonly #trace: boolean
   readonly #now: () => number
   readonly #startedAt: number
+  readonly #policy: 'heap' | 'queue' | 'stack'
   readonly #heap: MinHeap<Offer> | null
   readonly #queue: Offer[] = []
 
@@ -122,7 +135,8 @@ export class SearchRun {
     this.#trace = trace
     this.#now = now
     this.#startedAt = now()
-    this.#heap = cheapestWins.has(algorithm) ? new MinHeap<Offer>(compareOffers) : null
+    this.#policy = POLICY[algorithm]
+    this.#heap = this.#policy === 'heap' ? new MinHeap<Offer>(compareOffers) : null
   }
 
   // --- before the search ------------------------------------------------------------------------------
@@ -177,7 +191,7 @@ export class SearchRun {
       // A queue settles a vertex the moment it is discovered, so every later edge to it is uninteresting —
       // that is what makes BFS hop-shortest. A heap keeps the cheaper record and leaves the older entry in
       // place to be discarded on the way out: lazy deletion, and the reason `offer` never mutates the heap.
-      if (this.#heap === null) return
+      if (this.#policy !== 'heap') return
       if (!(offer.cost + COST_EPSILON < seen)) return
     }
     this.#best.set(offer.id, offer.cost)
@@ -216,6 +230,7 @@ export class SearchRun {
   #take(): Offer | null {
     const heap = this.#heap
     if (heap !== null) return heap.pop() ?? null
+    if (this.#policy === 'stack') return this.#queue.pop() ?? null
     const head = this.#queue[this.#queueHead]
     if (head === undefined) return null
     this.#queueHead += 1
@@ -244,7 +259,9 @@ export class SearchRun {
       if (!(weight > 0) || !Number.isFinite(weight)) {
         return { offers: [], badCost: { edgeId: edge.id, value: weight } }
       }
-      const isHop = !cheapestWins.has(this.#algorithm)
+      // A queue counts edges and a stack counts nothing, so neither accumulates a weight; the heap searches
+      // are the only ones whose `cost` is the quantity they minimise.
+      const isHop = this.#policy !== 'heap'
       offers.push({
         id: entry.to,
         via: from.id,
@@ -352,7 +369,12 @@ export class SearchRun {
   /** The frontier as the replay overlay wants it: unsettled candidates, soonest first, ties by id. */
   #frontierIds(): NodeId[] {
     if (!this.#trace) return []
-    const raw: readonly Offer[] = this.#heap !== null ? this.#heap.toArray() : this.#queue.slice(this.#queueHead)
+    const raw: readonly Offer[] =
+      this.#heap !== null
+        ? this.#heap.toArray()
+        : this.#policy === 'stack'
+          ? this.#queue
+          : this.#queue.slice(this.#queueHead)
     // Two filters, both of them a fact about the search rather than a guard: a settled vertex is no longer
     // on the frontier, and an entry the record has moved past is stale — it is still physically in the heap,
     // and drawing it would show a candidate the search had already rejected. The pair also removes

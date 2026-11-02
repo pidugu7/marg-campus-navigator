@@ -110,6 +110,17 @@ const load = (): SourceFile[] =>
     })
     .sort((a, b) => (a.rel < b.rel ? -1 : 1))
 
+/**
+ * Whether a path is the engine's *test code*, for the one rule that needs the wider definition: the test
+ * framework may be imported by a spec beside an engine module and by `src/engine/__tests__/helpers.ts`, because
+ * both are harness and neither ships. Name-only detection once forced `helpers.ts` to be framework-free by
+ * accident rather than by decision — so the directory is part of the rule here, and only here: the platform-
+ * global and network scans below keep iterating `!isTest`, which means a support module that reaches for
+ * `fetch` is still a violation. Widening an exemption is cheap; widening it quietly is not.
+ */
+const isEngineTestCode = (rel: string): boolean =>
+  rel.startsWith('src/engine/__tests__/') || /\.(test|spec)\.tsx?$/.test(rel)
+
 const files = load()
 const engineFiles = files.filter((f) => f.rel.startsWith('src/engine/'))
 const scannableFiles = files.filter((f) => !f.rel.startsWith('src/test/') && !f.isTest)
@@ -131,7 +142,7 @@ describe('engine independence', () => {
     for (const file of engineFiles) {
       for (const spec of importsOf(file.prose)) {
         if (isRelative(spec)) continue
-        if (file.isTest && spec === 'vitest') continue
+        if (isEngineTestCode(file.rel) && spec === 'vitest') continue
         if (ENGINE_BANNED_IMPORT_PREFIXES.some((banned) => spec === banned || spec.startsWith(`${banned}/`))) {
           violations.push(`${file.rel} -> ${spec} (banned)`)
         } else {
@@ -276,6 +287,15 @@ describe('test coverage contract (live from Phase 1)', () => {
 })
 
 describe('the guard itself', () => {
+  it('widens the framework exemption to the engine\'s test directory, and no further', () => {
+    const helpers = files.find((f) => f.rel === 'src/engine/__tests__/helpers.ts')
+    if (helpers === undefined) return expect.fail('src/engine/__tests__/helpers.ts went missing from the scan')
+    expect(isEngineTestCode(helpers.rel), 'the test-support module may import vitest').toBe(true)
+    expect(helpers.isTest, '…but it is not a spec, so the network and global scans still read it').toBe(false)
+    // A shipped module must not inherit the exemption by being near a test.
+    expect(isEngineTestCode('src/engine/algorithms/dijkstra.ts'), 'implementation code').toBe(false)
+  })
+
   it('reads specifiers from import/export statements, not from prose', () => {
     // Three separate false alarms produced this test: a doc comment saying `indistinguishable from
     // "not added yet"`, a template literal in a test message mentioning the engine alias, and a

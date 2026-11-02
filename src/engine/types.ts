@@ -148,7 +148,15 @@ export type Heuristic = (from: Point, target: Point) => number
 /** Route preferences offered in the UI. Each maps to a cost function. */
 export type WeightProfile = 'fastest' | 'shaded' | 'step-free' | 'quiet'
 
-export type AlgorithmName = 'dijkstra' | 'a-star' | 'bfs'
+/**
+ * The searches that can answer a route request.
+ *
+ * `'dfs'` is here because `RouteResult` is one union and a depth-first *path* is a real answer to a real
+ * question ("can I get there at all, and show me one way"), but it is not a shortest-path claim: no cost
+ * profile is minimised by it, and the route UI does not offer it in the picker. The three that *are* offered
+ * differ from it in one thing only — which end of the frontier they draw from.
+ */
+export type AlgorithmName = 'dijkstra' | 'a-star' | 'bfs' | 'dfs'
 
 /** What the UI asks for; everything the router needs and nothing it doesn't. */
 export interface RouteRequest {
@@ -216,8 +224,10 @@ export interface RouteMetrics {
    * "watch it search" overlay and Phase 5's replay possible at all: without it there is nothing to
    * animate but the answer.
    *
-   * Snapshot *contents* are sorted by (priority, id) for the heap searches and kept in discovery order
-   * for BFS, so two runs of the same search on the same graph produce byte-identical arrays. They are
+   * Snapshot *contents* are sorted by (priority, id) for every container — the same comparator the heap
+   * uses is applied to the queue and the stack, so a BFS frame reads `["c","d"]` where its array order was
+   * `d, c`. That is the difference between "what this search would consider next" and "how the storage
+   * happened to be filled", and it is what makes two runs of the same search byte-identical. They are
    * empty when a caller asks for `trace: false` — the option Phase 4's benchmark uses to price the
    * search without the record-keeping.
    */
